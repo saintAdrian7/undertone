@@ -40,6 +40,10 @@ describe('useAudioPipeline', () => {
     await waitFor(() => expect(listening.startListening).toHaveBeenCalledTimes(1))
     const options = listening.startListening.mock.calls[0]?.[0] as ListeningOptions
     expect(options.sessionStartedAt).toBe(Date.parse('2026-10-19T10:00:00.000Z'))
+    // The ONNX runtime resolves relative paths against its own script, so the URLs must be absolute.
+    expect(options.vadAssetsUrl).toBe(new URL('vendor/vad/', document.baseURI).href)
+    expect(options.ortWasmUrl).toBe(new URL('vendor/ort/', document.baseURI).href)
+    expect(options.transformersWasmUrl).toBe(new URL('vendor/ort-transformers/', document.baseURI).href)
     unmount()
     await waitFor(() => expect(listening.stop).toHaveBeenCalledTimes(1))
   })
