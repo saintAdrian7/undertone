@@ -7,9 +7,11 @@ import { startListening, type ListeningSession } from './listening'
 const env = import.meta.env
 const WHISPER_MODEL = env.VITE_WHISPER_MODEL ?? 'onnx-community/whisper-base'
 // Bundled by scripts/copy-assets.mjs into the renderer's public folder, so nothing executable is fetched at runtime.
-const VAD_ASSETS_URL = env.VITE_VAD_ASSETS_URL ?? './vendor/vad/'
-const ORT_WASM_URL = env.VITE_ORT_WASM_URL ?? './vendor/ort/'
-const TRANSFORMERS_WASM_URL = env.VITE_TRANSFORMERS_ORT_WASM_URL ?? './vendor/ort-transformers/'
+// The ONNX runtime resolves relative paths against its own script (Vite's dependency cache in dev), so make them absolute.
+const assetUrl = (override: string | undefined, fallback: string): string => new URL(override ?? fallback, document.baseURI).href
+const VAD_ASSETS_URL = assetUrl(env.VITE_VAD_ASSETS_URL, 'vendor/vad/')
+const ORT_WASM_URL = assetUrl(env.VITE_ORT_WASM_URL, 'vendor/ort/')
+const TRANSFORMERS_WASM_URL = assetUrl(env.VITE_TRANSFORMERS_ORT_WASM_URL, 'vendor/ort-transformers/')
 
 const describe = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 

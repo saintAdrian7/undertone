@@ -33,22 +33,29 @@ const describe = (error: unknown): string => (error instanceof Error ? error.mes
 
 export function createShortcutSyncer(deps: ShortcutSyncerDeps): ShortcutSyncer {
   let registered: Registrations = {}
+  // Accelerators that could not be registered; retried only once the user changes them.
+  const failed = new Set<string>()
 
   return {
     sync(state) {
       const enabled = shortcutsToRegister(state)
       const next: Registrations = {}
-      for (const key of KEYS) next[key] = enabled[key] ? state.shortcuts[key] : null
+      for (const key of KEYS) {
+        const accelerator = enabled[key] ? state.shortcuts[key] : null
+        next[key] = accelerator && failed.has(accelerator) ? null : accelerator
+      }
       const diff = diffRegistrations(registered, next)
       for (const accelerator of diff.unregister) deps.unregister(accelerator)
       for (const [key, accelerator] of diff.register) {
         try {
           if (!deps.register(accelerator, deps.actions[key as ShortcutKey])) {
             deps.log.error(`Failed to register global shortcut ${accelerator} for ${key} (another app may own it)`)
+            failed.add(accelerator)
             next[key] = null
           }
         } catch (error) {
           deps.log.error(`Invalid accelerator ${accelerator} for ${key}: ${describe(error)}`)
+          failed.add(accelerator)
           next[key] = null
         }
       }
