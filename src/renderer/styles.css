@@ -1,0 +1,167 @@
+:root {
+  color-scheme: dark;
+  --bg: rgba(20, 20, 24, 0.82);
+  --bg-strong: rgba(20, 20, 24, 0.94);
+  --fg: #f3f3f5;
+  --muted: #a4a4ad;
+  --accent: #6ee7b7;
+  --danger: #fca5a5;
+  --radius: 14px;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+}
+
+button {
+  font: inherit;
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+button[aria-pressed="true"] {
+  background: var(--accent);
+  color: #0b1f17;
+  border-color: transparent;
+}
+
+button.listening {
+  background: var(--danger);
+  color: #3b0a0a;
+}
+
+/* Control bar: the small pill at the top of the screen. */
+.control-root {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.control-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--bg);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  backdrop-filter: blur(12px);
+  -webkit-app-region: drag;
+  white-space: nowrap;
+}
+
+.control-bar .speaker {
+  color: var(--muted);
+  padding: 0 4px;
+}
+
+/* Chat panel: transcript, streamed answer and composer. */
+.chat-root {
+  height: 100%;
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+.chat-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  box-sizing: border-box;
+  background: var(--bg-strong);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius);
+  backdrop-filter: blur(12px);
+  color: var(--fg);
+}
+
+.transcript {
+  flex: 0 0 auto;
+  max-height: 38%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  user-select: text;
+}
+
+.transcript li {
+  display: grid;
+  grid-template-columns: 3.2em 6.5em 1fr;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.transcript .time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.transcript .speaker {
+  color: var(--muted);
+}
+
+.transcript li.me .speaker {
+  color: var(--accent);
+}
+
+.answer {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+.answer p {
+  margin: 0 0 6px;
+  line-height: 1.45;
+}
+
+.answer .thinking,
+.audio-error {
+  color: var(--muted);
+}
+
+.answer [role="alert"],
+.audio-error {
+  color: var(--danger);
+}
+
+.composer {
+  display: flex;
+  gap: 6px;
+}
+
+.composer input {
+  flex: 1;
+  font: inherit;
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 7px 10px;
+  outline: none;
+}
+
+.composer input:focus {
+  border-color: var(--accent);
+}

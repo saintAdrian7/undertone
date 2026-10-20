@@ -1,0 +1,9 @@
+node_modules/
+out/
+dist/
+coverage/
+.env*
+!.env.example
+*.log
+*.tsbuildinfo
+src/renderer/public/vendor/
