@@ -299,8 +299,19 @@ function main(): void {
     })
     ipcMain.on(IPC.quit, (event) => {
       guard(event)
-      app.quit()
+      quitApp()
     })
+  }
+
+  /** The overlay windows are `closable: false`, so a plain `app.quit()` stalls; tear them down first. */
+  function quitApp(): void {
+    shortcuts.dispose()
+    tray?.destroy()
+    tray = null
+    manager.dispose()
+    app.quit()
+    // Belt and braces: if anything keeps the process alive, leave anyway.
+    setTimeout(() => app.exit(0), 1500).unref()
   }
 
   let tray: Tray | null = null
@@ -319,7 +330,7 @@ function main(): void {
           toggleChat: () => store.patch({ showChat: !store.get().showChat }),
           toggleInvisible: () => store.patch({ isInvisible: !store.get().isInvisible }),
           toggleListening,
-          quit: () => app.quit(),
+          quit: quitApp,
         }),
       ),
     )
