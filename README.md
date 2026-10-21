@@ -13,11 +13,27 @@ npm install
 copy .env.example .env
 ```
 
-Put your Anthropic key in `.env`:
+Pick a model in `.env`. Claude is the default when its key is set:
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
 ```
+
+Any OpenAI-compatible server works too, which is the easy way to test with free or local models:
+
+```
+# OpenRouter free tier
+LLM_PROVIDER=openai
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_API_KEY=sk-or-...
+LLM_MODEL=meta-llama/llama-3.3-70b-instruct:free
+
+# Ollama on this machine (no key)
+LLM_PROVIDER=ollama
+LLM_MODEL=llama3.2
+```
+
+Groq (`https://api.groq.com/openai/v1`), LM Studio (`http://localhost:1234/v1`) and vLLM use the same `openai` form. Screenshots are sent as image parts, so pick a vision-capable model if you keep the **Screen** toggle on; text-only models still work for the transcript.
 
 Run in development:
 
