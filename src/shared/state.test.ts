@@ -13,6 +13,13 @@ describe('RendererPatchSchema', () => {
     }
   })
 
+  it('lets the renderer report the measured control bar width within bounds', () => {
+    expect(defaultState().controlWidth).toBe(320)
+    expect(RendererPatchSchema.parse({ controlWidth: 410 })).toEqual({ controlWidth: 410 })
+    expect(() => RendererPatchSchema.parse({ controlWidth: 50 })).toThrow()
+    expect(() => RendererPatchSchema.parse({ controlWidth: 5000 })).toThrow()
+  })
+
   it('caps the chat height', () => {
     expect(() => RendererPatchSchema.parse({ chatExpandedHeight: MAX_CHAT_HEIGHT + 1 })).toThrow()
   })

@@ -43,8 +43,14 @@ describe('chatHeightFor', () => {
   it('uses the expanded height when expanded', () => {
     expect(chatHeightFor(state({ chatWindowIsExpanded: true, chatExpandedHeight: 420 }))).toBe(420)
   })
-  it('never shrinks the expanded height below 350', () => {
-    expect(chatHeightFor(state({ chatWindowIsExpanded: true, chatExpandedHeight: 100 }))).toBe(350)
+  it('clamps the expanded height between the minimum and the cap', () => {
+    expect(chatHeightFor(state({ chatWindowIsExpanded: true, chatExpandedHeight: 40 }))).toBe(CHAT_MIN_HEIGHT)
+    expect(chatHeightFor(state({ chatWindowIsExpanded: true, chatExpandedHeight: 1200 }))).toBe(1200)
+  })
+
+  it('sizes the control bar from the width the renderer measured', () => {
+    expect(overlayWindowOptions('control', state({ controlWidth: 410 })).width).toBe(410)
+    expect(overlayWindowOptions('control', state()).width).toBe(CONTROL_SIZE.width)
   })
 })
 
