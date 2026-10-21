@@ -7,6 +7,7 @@ import {
   overlayWindowOptions,
   CONTROL_SIZE,
   CHAT_WIDTH,
+  CHAT_MIN_HEIGHT,
 } from './window-options'
 
 const state = (patch: Partial<AppState> = {}): AppState => ({ ...defaultState(), ...patch })
