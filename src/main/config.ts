@@ -1,8 +1,19 @@
 export const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-5-5'
+export const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1'
+export const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434/v1'
+
+export type LlmProviderKind = 'anthropic' | 'openai'
+
+export interface LlmConfig {
+  provider: LlmProviderKind
+  apiKey: string | null
+  model: string
+  /** Only for OpenAI-compatible endpoints; without a trailing slash. */
+  baseUrl: string | null
+}
 
 export interface AppConfig {
-  anthropicApiKey: string | null
-  claudeModel: string
+  llm: LlmConfig | null
 }
 
 const stripQuotes = (value: string): string => {
@@ -25,10 +36,34 @@ export function parseEnv(text: string): Record<string, string> {
   return result
 }
 
+const trimmed = (value: string | undefined): string | null => {
+  const text = value?.trim()
+  return text ? text : null
+}
+
+/**
+ * Picks the answer model from the environment.
+ * - `ANTHROPIC_API_KEY` alone selects Claude (`ANTHROPIC_MODEL` optional).
+ * - `LLM_PROVIDER=openai|ollama` selects any OpenAI-compatible endpoint via `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`.
+ * - `LLM_PROVIDER=anthropic` selects Claude using the generic `LLM_*` variables as fallbacks.
+ */
 export function resolveConfig(env: Record<string, string | undefined>): AppConfig {
-  const key = env.ANTHROPIC_API_KEY?.trim()
-  return {
-    anthropicApiKey: key ? key : null,
-    claudeModel: env.ANTHROPIC_MODEL?.trim() || DEFAULT_CLAUDE_MODEL,
+  const selected = trimmed(env.LLM_PROVIDER)?.toLowerCase() ?? null
+
+  if (selected === null || selected === 'anthropic') {
+    const apiKey = trimmed(env.ANTHROPIC_API_KEY) ?? (selected ? trimmed(env.LLM_API_KEY) : null)
+    if (!apiKey) return { llm: null }
+    const model = trimmed(env.ANTHROPIC_MODEL) ?? trimmed(env.LLM_MODEL) ?? DEFAULT_CLAUDE_MODEL
+    return { llm: { provider: 'anthropic', apiKey, model, baseUrl: null } }
   }
+
+  if (selected === 'openai' || selected === 'ollama') {
+    const model = trimmed(env.LLM_MODEL)
+    if (!model) return { llm: null }
+    const fallbackBase = selected === 'ollama' ? DEFAULT_OLLAMA_BASE_URL : DEFAULT_OPENAI_BASE_URL
+    const baseUrl = (trimmed(env.LLM_BASE_URL) ?? fallbackBase).replace(/\/+$/, '')
+    return { llm: { provider: 'openai', apiKey: trimmed(env.LLM_API_KEY), model, baseUrl } }
+  }
+
+  throw new Error(`Unknown LLM_PROVIDER "${selected}"; use anthropic, openai or ollama`)
 }

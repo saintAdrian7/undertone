@@ -26,7 +26,10 @@ export function createAnswerService(deps: AnswerServiceDeps): AnswerService {
   return {
     async ask({ requestId, question }, send) {
       if (!deps.provider) {
-        send(IPC.answerError, { requestId, message: 'ANTHROPIC_API_KEY is not set. Add it to .env and restart the app.' })
+        send(IPC.answerError, {
+          requestId,
+          message: 'No model is configured. Set ANTHROPIC_API_KEY, or LLM_PROVIDER and LLM_MODEL, in .env and restart the app.',
+        })
         return
       }
       // One answer at a time: a new question aborts the previous stream and its token spend.

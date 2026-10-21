@@ -73,15 +73,21 @@ button.listening {
   padding: 0 4px;
 }
 
-/* Chat panel: transcript, streamed answer and composer. */
+.control-measure {
+  display: inline-flex;
+}
+
+/* Chat panel: transcript, streamed answer and composer. The window follows the panel's measured height. */
 .chat-root {
-  height: 100%;
   padding: 6px;
   box-sizing: border-box;
 }
 
+.chat-measure {
+  display: flow-root;
+}
+
 .chat-panel {
-  height: 100%;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -96,7 +102,7 @@ button.listening {
 
 .transcript {
   flex: 0 0 auto;
-  max-height: 38%;
+  max-height: 240px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -126,6 +132,7 @@ button.listening {
 
 .answer {
   flex: 1 1 auto;
+  max-height: 560px;
   overflow-y: auto;
   white-space: pre-wrap;
   user-select: text;

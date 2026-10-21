@@ -49,7 +49,7 @@ describe('OpenAICompatibleProvider', () => {
     expect(url).toBe('https://example.test/v1/chat/completions')
     expect(init?.method).toBe('POST')
     expect(init?.signal).toBe(controller.signal)
-    expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer key-1')
+    expect((init!.headers as Record<string, string>).Authorization).toBe('Bearer key-1')
     const body = JSON.parse(String(init?.body)) as { model: string; stream: boolean; messages: Array<{ role: string; content: unknown }> }
     expect(body.model).toBe('free-model')
     expect(body.stream).toBe(true)
@@ -63,7 +63,7 @@ describe('OpenAICompatibleProvider', () => {
     const fetch = vi.fn<FetchLike>(async () => new Response(sse(['data: [DONE]\n\n']), { status: 200 }))
     const provider = new OpenAICompatibleProvider({ fetch, baseUrl: 'http://localhost:11434/v1', apiKey: null, model: 'llama3.2' })
     await collect(provider.stream({ question: 'hi', transcript: [] }))
-    expect((fetch.mock.calls[0]?.[1]?.headers as Record<string, string>).Authorization).toBeUndefined()
+    expect((fetch.mock.calls[0]![1]!.headers as Record<string, string>).Authorization).toBeUndefined()
   })
 
   it('reports HTTP failures with the status and the server message', async () => {

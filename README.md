@@ -74,8 +74,12 @@ Ctrl+Enter / Enter ─ screenshot (overlay hidden) ─ Claude API (main process)
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | required | Answers |
+| `ANTHROPIC_API_KEY` | | Selects Claude |
 | `ANTHROPIC_MODEL` | `claude-sonnet-5-5` | Claude model |
+| `LLM_PROVIDER` | | `openai`, `ollama` or `anthropic` |
+| `LLM_BASE_URL` | OpenAI or Ollama default | `/v1` base of an OpenAI-compatible server |
+| `LLM_API_KEY` | | Key for that server (Ollama needs none) |
+| `LLM_MODEL` | | Model name on that server |
 | `VITE_WHISPER_MODEL` | `onnx-community/whisper-base` | Any Whisper model published for transformers.js |
 | `VITE_VAD_ASSETS_URL` | jsDelivr | Where the VAD worklet and ONNX files are served from |
 | `VITE_ORT_WASM_URL` | jsDelivr | Where onnxruntime-web's WASM files are served from |
