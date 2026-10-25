@@ -20,6 +20,13 @@ describe('RendererPatchSchema', () => {
     expect(() => RendererPatchSchema.parse({ controlWidth: 5000 })).toThrow()
   })
 
+  it('lets the renderer toggle automatic answers but not the profile name', () => {
+    expect(defaultState().autoAnswer).toBe(true)
+    expect(defaultState().profileName).toBeNull()
+    expect(RendererPatchSchema.parse({ autoAnswer: false })).toEqual({ autoAnswer: false })
+    expect(() => RendererPatchSchema.parse({ profileName: 'x' })).toThrow()
+  })
+
   it('caps the chat height', () => {
     expect(() => RendererPatchSchema.parse({ chatExpandedHeight: MAX_CHAT_HEIGHT + 1 })).toThrow()
   })
