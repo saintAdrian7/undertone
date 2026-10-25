@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { MAX_TRANSCRIPT_TEXT_CHARS, SpeakerRoleSchema, type AppState, type RendererPatch } from './state'
+import { MAX_TRANSCRIPT_TEXT_CHARS, ShortcutsSchema, SpeakerRoleSchema, type AppState, type RendererPatch } from './state'
 import { IPC } from './ipc-channels'
 
 export { IPC, type IpcChannel } from './ipc-channels'
@@ -60,10 +60,56 @@ export interface InvokeMap {
   /** Opens a file picker for a resume; resolves to an error message, or null when the profile changed or the user cancelled. */
   [IPC.profilePick]: { request: undefined; response: string | null }
   [IPC.profileClear]: { request: undefined; response: void }
+  [IPC.profileGet]: { request: undefined; response: ProfileInfo | null }
+  [IPC.appInfo]: { request: undefined; response: AppInfo }
+  [IPC.llmGet]: { request: undefined; response: PublicLlmSettings | null }
+  /** Resolves to an error message, or null when the model was switched. */
+  [IPC.llmSet]: { request: LlmSettingsRequest; response: string | null }
+  /** Rejects when the accelerator is already taken. */
+  [IPC.shortcutsSet]: { request: ShortcutUpdate; response: AppState }
 }
 
 export const ControlDragSchema = z.strictObject({ x: z.number().int(), y: z.number().int() })
 export type ControlDrag = z.infer<typeof ControlDragSchema>
+
+/** One shortcut change from the Settings window; `null` restores the default. */
+export const ShortcutUpdateSchema = z.strictObject({
+  key: ShortcutsSchema.keyof(),
+  accelerator: z.string().min(1).max(64).nullable(),
+})
+export type ShortcutUpdate = z.infer<typeof ShortcutUpdateSchema>
+
+export const LlmProviderSchema = z.enum(['anthropic', 'openai', 'claude-code'])
+
+/** Model settings from the Settings window. A missing `apiKey` keeps the stored one. */
+export const LlmSettingsRequestSchema = z.strictObject({
+  provider: LlmProviderSchema,
+  model: z.string().min(1).max(200),
+  baseUrl: z.string().max(500).nullable(),
+  apiKey: z.string().max(500).optional(),
+})
+export type LlmSettingsRequest = z.infer<typeof LlmSettingsRequestSchema>
+
+/** The model configuration as the renderer may see it: never the key, only whether one is set. */
+export interface PublicLlmSettings {
+  provider: z.infer<typeof LlmProviderSchema>
+  model: string
+  baseUrl: string | null
+  hasApiKey: boolean
+  /** Whether it came from the Settings window or from `.env`. */
+  source: 'settings' | 'env'
+}
+
+export interface AppInfo {
+  name: string
+  version: string
+  repository: string
+}
+
+export interface ProfileInfo {
+  name: string
+  text: string
+}
 
 export interface SendMap {
   [IPC.toggleSession]: undefined

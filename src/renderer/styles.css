@@ -622,3 +622,259 @@ button:focus-visible {
 .menu .spacer {
   width: 14px;
 }
+
+/* Settings window ------------------------------------------------------------ */
+.settings-root {
+  display: flex;
+  height: 100%;
+  background: var(--panel-solid);
+  font-size: 13px;
+}
+
+.settings-root .side {
+  width: 200px;
+  flex-shrink: 0;
+  padding: 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(63, 63, 70, 0.35);
+}
+
+.settings-root .side a {
+  display: block;
+  padding: 7px 10px;
+  border-radius: 8px;
+  color: var(--muted-fg);
+  text-decoration: none;
+}
+
+.settings-root .side a:hover {
+  color: var(--fg);
+}
+
+.settings-root .side a.on {
+  background: var(--muted);
+  color: var(--fg);
+}
+
+.settings-root .content {
+  flex: 1;
+  min-width: 0;
+  padding: 4px;
+  overflow: auto;
+}
+
+.settings-root .card {
+  min-height: 100%;
+  border-radius: 10px;
+  background: var(--card);
+  padding: 22px 26px 30px;
+}
+
+.settings-root h2 {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.settings-root .row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-root .row small,
+.settings-root .hint,
+.settings-root .field span {
+  display: block;
+  color: var(--muted-fg);
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.settings-root .hint {
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+
+.settings-root .error {
+  color: #fca5a5;
+}
+
+.toggle {
+  position: relative;
+  flex-shrink: 0;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--muted);
+  transition: background 150ms;
+}
+
+.toggle.on {
+  background: linear-gradient(var(--accent-a), var(--accent-b));
+}
+
+.toggle .knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 150ms;
+}
+
+.toggle.on .knob {
+  transform: translateX(14px);
+}
+
+.accents {
+  display: flex;
+  gap: 8px;
+}
+
+.accent-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.accent-choice input {
+  accent-color: var(--accent-hi);
+}
+
+.accent-choice::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.accent-choice.ember::before {
+  background: linear-gradient(#b45309, #7c2d12);
+}
+
+.accent-choice.jade::before {
+  background: linear-gradient(#047857, #064e3b);
+}
+
+.accent-choice.violet::before {
+  background: linear-gradient(#6d28d9, #4c1d95);
+}
+
+.settings-root .field {
+  display: block;
+  margin: 0 0 12px;
+}
+
+.settings-root .field span {
+  margin: 0 0 4px;
+}
+
+.settings-root input[type='text'],
+.settings-root input[type='password'],
+.settings-root select {
+  width: 100%;
+  max-width: 460px;
+  font: inherit;
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--input);
+  border-radius: 6px;
+  padding: 7px 10px;
+  outline: none;
+  user-select: text;
+}
+
+.settings-root input:focus,
+.settings-root select:focus {
+  border-color: var(--accent-hi);
+}
+
+.settings-root .actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.settings-root .actions .btn {
+  height: 30px;
+  padding: 0 14px;
+  box-shadow: none;
+}
+
+.settings-root .preview {
+  max-height: 320px;
+  overflow: auto;
+  margin: 12px 0 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  white-space: pre-wrap;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted-fg);
+  user-select: text;
+}
+
+.shortcuts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.shortcuts li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.keycap {
+  min-width: 120px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--input);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.keycap.recording {
+  border-color: var(--accent-hi);
+  color: var(--accent-hi);
+}
+
+.about {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.about-logo {
+  width: 44px;
+  height: 44px;
+  color: var(--accent-hi);
+}
+
+.about-name {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.settings-root a {
+  color: var(--accent-hi);
+}

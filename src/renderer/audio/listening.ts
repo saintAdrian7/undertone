@@ -19,6 +19,8 @@ export interface ListeningOptions {
   onModelStatus?(status: ModelStatus): void
   onError(message: string): void
   transcriptionProvider?: TranscriptionProvider
+  /** Microphone to use; null or undefined means the system default. */
+  micDeviceId?: string | null
 }
 
 export interface ListeningSession {
@@ -126,7 +128,12 @@ export async function startListening(options: ListeningOptions): Promise<Listeni
 
   try {
     const mic = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        ...(options.micDeviceId ? { deviceId: { exact: options.micDeviceId } } : {}),
+      },
     })
     streams.push(mic)
     const loopback = await getLoopbackStream()

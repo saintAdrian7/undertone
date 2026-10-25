@@ -1,9 +1,11 @@
 import type { AppState } from '@shared/state'
+import { APP_NAME } from '@shared/brand'
 
 export interface TrayActions {
   toggleChat(): void
   toggleInvisible(): void
   toggleListening(): void
+  openSettings(): void
   quit(): void
 }
 
@@ -20,7 +22,8 @@ export function trayMenuTemplate(state: AppState, actions: TrayActions): TrayMen
     { label: state.isListening ? 'Stop listening' : 'Start listening', click: actions.toggleListening },
     { label: state.showChat ? 'Hide panel' : 'Show panel', click: actions.toggleChat },
     { label: state.isInvisible ? 'Disable invisibility' : 'Enable invisibility', click: actions.toggleInvisible },
+    { label: 'Settings…', click: actions.openSettings },
     { type: 'separator' },
-    { label: 'Quit Meeting Copilot', click: actions.quit },
+    { label: `Quit ${APP_NAME}`, click: actions.quit },
   ]
 }

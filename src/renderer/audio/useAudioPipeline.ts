@@ -35,6 +35,7 @@ export function useAudioPipeline(state: AppState, patch: (patch: RendererPatch) 
 
     startListening({
       sessionStartedAt,
+      micDeviceId: state.micDeviceId,
       whisperModel: WHISPER_MODEL,
       vadAssetsUrl: VAD_ASSETS_URL,
       ortWasmUrl: ORT_WASM_URL,

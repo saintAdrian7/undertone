@@ -12,6 +12,11 @@ export const IPC = {
   cancelAsk: 'answer:cancel',
   profilePick: 'profile:pick',
   profileClear: 'profile:clear',
+  profileGet: 'profile:get',
+  appInfo: 'app:info',
+  llmGet: 'llm:get',
+  llmSet: 'llm:set',
+  shortcutsSet: 'shortcuts:set',
   // renderer → main (send)
   toggleSession: 'session:toggle',
   controlResetPosition: 'control:reset-position',

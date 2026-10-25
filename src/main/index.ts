@@ -9,6 +9,7 @@ import {
   nativeImage,
   screen,
   session,
+  shell,
   Tray,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
@@ -19,8 +20,20 @@ import { basename, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import log from 'electron-log/main'
 import Anthropic from '@anthropic-ai/sdk'
-import { AskRequestSchema, CancelRequestSchema, ControlDragSchema, IPC, TranscriptOpSchema, type EventMap } from '@shared/ipc'
-import { APP_NAME } from '@shared/brand'
+import {
+  AskRequestSchema,
+  CancelRequestSchema,
+  ControlDragSchema,
+  IPC,
+  LlmSettingsRequestSchema,
+  ShortcutUpdateSchema,
+  TranscriptOpSchema,
+  type EventMap,
+  type PublicLlmSettings,
+} from '@shared/ipc'
+import { APP_NAME, REPOSITORY_URL } from '@shared/brand'
+import { loadLlmSettings, publicLlmSettings, resolveConfigWith, saveLlmSettings, type LlmSettings } from './config-store'
+import { applyShortcutUpdate } from './shortcuts/update'
 import type { AnswerProvider, Screenshot } from '@shared/providers'
 import { RendererPatchSchema, type AppState, type ShortcutKey } from '@shared/state'
 import { applyTranscriptOp } from '@shared/transcript'
@@ -36,7 +49,7 @@ import { trayMenuTemplate } from './tray/menu'
 import { selectLoopbackSource } from './capture/sources'
 import { captureScreenshot } from './capture/screenshot'
 import { ClaudeAnswerProvider, type MessageStreamClient } from './llm/claude-provider'
-import { DEFAULT_OPENAI_BASE_URL, parseEnv, resolveConfig, type AppConfig, type LlmConfig } from './config'
+import { DEFAULT_OPENAI_BASE_URL, parseEnv, type AppConfig, type LlmConfig } from './config'
 import { OpenAICompatibleProvider } from './llm/openai-compatible-provider'
 import { ClaudeCodeProvider } from './llm/claude-code-provider'
 
@@ -98,10 +111,14 @@ function createProvider(llm: LlmConfig | null): AnswerProvider | null {
   return new OpenAICompatibleProvider({ baseUrl: llm.baseUrl ?? DEFAULT_OPENAI_BASE_URL, apiKey: llm.apiKey, model: llm.model })
 }
 
-function main(): void {
+async function main(): Promise<void> {
+  const userData = app.getPath('userData')
+  const env = { ...loadDotEnv(), ...process.env }
+  // Settings chosen in the Settings window win over .env.
+  let savedLlm = await loadLlmSettings(userData)
   let config: AppConfig = { llm: null }
   try {
-    config = resolveConfig({ ...loadDotEnv(), ...process.env })
+    config = resolveConfigWith(env, savedLlm)
   } catch (error) {
     log.error(describe(error))
   }
@@ -109,9 +126,33 @@ function main(): void {
   const windowsByKind = new Map<OverlayKind, BrowserWindow>()
   const loaded = new Set<OverlayKind>()
 
-  const provider = createProvider(config.llm)
+  let provider = createProvider(config.llm)
   if (provider) log.info(`Answer model: ${config.llm?.provider} ${config.llm?.model}`)
-  else log.warn('No model configured; set ANTHROPIC_API_KEY, or LLM_PROVIDER and LLM_MODEL, in .env')
+  else log.warn('No model configured; pick one in Settings, or set ANTHROPIC_API_KEY or LLM_PROVIDER and LLM_MODEL in .env')
+
+  function currentLlm(): PublicLlmSettings | null {
+    if (savedLlm) return publicLlmSettings(savedLlm, 'settings')
+    return config.llm ? publicLlmSettings({ ...config.llm }, 'env') : null
+  }
+
+  /** Switches the model at runtime; returns an error message for the renderer, or null on success. */
+  async function switchLlm(next: LlmSettings): Promise<string | null> {
+    try {
+      const nextConfig = resolveConfigWith(env, next)
+      const nextProvider = createProvider(nextConfig.llm)
+      await saveLlmSettings(userData, next)
+      void provider?.dispose?.()
+      provider = nextProvider
+      savedLlm = next
+      config = nextConfig
+      log.info(`Answer model: ${next.provider} ${next.model}`)
+      warmProvider()
+      return null
+    } catch (error) {
+      log.warn(`Model change failed: ${describe(error)}`)
+      return describe(error)
+    }
+  }
 
   function loadRoute(win: BrowserWindow, route: string): void {
     if (DEV_RENDERER_URL) void win.loadURL(`${DEV_RENDERER_URL}#${route}`)
@@ -231,7 +272,7 @@ function main(): void {
   }
 
   const answers = createAnswerService({
-    provider,
+    getProvider: () => provider,
     getState: () => store.get(),
     capture,
     getProfile: () => profile?.text ?? null,
@@ -402,8 +443,30 @@ function main(): void {
     })
     ipcMain.on(IPC.openSettings, (event) => {
       guard(event)
-      // The settings window arrives in the next step; until then a pill click shows the panel.
-      store.patch({ showChat: true })
+      openSettings()
+    })
+    ipcMain.handle(IPC.appInfo, (event) => {
+      guard(event)
+      return { name: APP_NAME, version: app.getVersion(), repository: REPOSITORY_URL }
+    })
+    ipcMain.handle(IPC.profileGet, (event) => {
+      guard(event)
+      return profile ? { name: profile.name, text: profile.text } : null
+    })
+    ipcMain.handle(IPC.llmGet, (event) => {
+      guard(event)
+      return currentLlm()
+    })
+    ipcMain.handle(IPC.llmSet, (event, request: unknown) => {
+      guard(event)
+      const parsed = LlmSettingsRequestSchema.parse(request)
+      // A request without a key keeps the stored one for the same provider; the key itself never reaches the renderer.
+      const apiKey = parsed.apiKey ?? (savedLlm?.provider === parsed.provider ? savedLlm.apiKey : null)
+      return switchLlm({ provider: parsed.provider, model: parsed.model, baseUrl: parsed.baseUrl, apiKey })
+    })
+    ipcMain.handle(IPC.shortcutsSet, (event, request: unknown) => {
+      guard(event)
+      return store.patch({ shortcuts: applyShortcutUpdate(store.get().shortcuts, ShortcutUpdateSchema.parse(request)) })
     })
     ipcMain.on(IPC.toggleSession, (event) => {
       guard(event)
@@ -419,8 +482,53 @@ function main(): void {
     })
   }
 
+  let settingsWindow: BrowserWindow | null = null
+  /** A normal window (Cluely calls it the dashboard): sidebar of sections, opened from the pill or the tray. */
+  function openSettings(): void {
+    if (settingsWindow && !settingsWindow.isDestroyed()) {
+      settingsWindow.show()
+      settingsWindow.focus()
+      return
+    }
+    const win = new BrowserWindow({
+      width: 900,
+      height: 620,
+      minWidth: 720,
+      minHeight: 520,
+      title: APP_NAME,
+      show: false,
+      autoHideMenuBar: true,
+      backgroundColor: '#18181b',
+      webPreferences: {
+        preload: preloadPath(),
+        contextIsolation: true,
+        sandbox: true,
+        nodeIntegration: false,
+        webSecurity: true,
+        allowRunningInsecureContent: false,
+        webviewTag: false,
+      },
+    })
+    settingsWindow = win
+    win.setContentProtection(store.get().isInvisible)
+    win.once('ready-to-show', () => win.show())
+    win.on('closed', () => {
+      if (settingsWindow === win) settingsWindow = null
+    })
+    win.webContents.on('will-navigate', (event) => event.preventDefault())
+    win.webContents.on('will-attach-webview', (event) => event.preventDefault())
+    win.webContents.setWindowOpenHandler(({ url }) => {
+      // The About page links to the repository; everything else stays inside the app.
+      if (url === REPOSITORY_URL) void shell.openExternal(url)
+      return { action: 'deny' }
+    })
+    loadRoute(win, '/settings')
+  }
+
   /** The overlay windows are `closable: false`, so a plain `app.quit()` stalls; tear them down first. */
   function quitApp(): void {
+    settingsWindow?.destroy()
+    settingsWindow = null
     shortcuts.dispose()
     autoAnswer.cancel()
     void provider?.dispose?.()
@@ -448,6 +556,7 @@ function main(): void {
           toggleChat: () => store.patch({ showChat: !store.get().showChat }),
           toggleInvisible: () => store.patch({ isInvisible: !store.get().isInvisible }),
           toggleListening,
+          openSettings,
           quit: quitApp,
         }),
       ),
@@ -461,6 +570,9 @@ function main(): void {
     syncTray(state)
     broadcast(IPC.stateUpdated, state)
     watchForQuestions(previous, state)
+    if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.setContentProtection(state.isInvisible)
+    // Only a packaged build registers itself; in development that would register the Electron binary.
+    if (state.openAtLogin !== previous.openAtLogin && app.isPackaged) app.setLoginItemSettings({ openAtLogin: state.openAtLogin })
     previous = state
   })
 
@@ -484,7 +596,7 @@ function main(): void {
     tray?.destroy()
   })
   app.on('second-instance', () => store.patch({ showChat: true }))
-  log.info('Meeting Copilot ready')
+  log.info(`${APP_NAME} ready`)
 }
 
 if (!app.requestSingleInstanceLock()) {

@@ -8,6 +8,7 @@ import { disposeSharedWhisperProvider } from './stt/whisper-provider'
 import { useContentSize } from './layout/useContentSize'
 import { ControlBar } from './components/ControlBar'
 import { ChatPanel } from './components/ChatPanel'
+import { SettingsApp } from './settings/SettingsApp'
 import './styles.css'
 
 type Patch = (patch: RendererPatch) => Promise<void>
@@ -128,6 +129,12 @@ function ChatScreen({ state, patch }: { state: AppState; patch: Patch }) {
 
 export function App() {
   const { state, patch } = useAppState()
+  const accent = state?.accent
+  useEffect(() => {
+    if (accent) document.documentElement.dataset.accent = accent
+  }, [accent])
   if (!state) return null
-  return currentRoute() === '/chat' ? <ChatScreen state={state} patch={patch} /> : <ControlScreen state={state} patch={patch} />
+  const route = currentRoute()
+  if (route.startsWith('/settings')) return <SettingsApp />
+  return route === '/chat' ? <ChatScreen state={state} patch={patch} /> : <ControlScreen state={state} patch={patch} />
 }
