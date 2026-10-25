@@ -2,7 +2,8 @@ export const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-5-5'
 export const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1'
 export const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434/v1'
 
-export type LlmProviderKind = 'anthropic' | 'openai'
+export type LlmProviderKind = 'anthropic' | 'openai' | 'claude-code'
+export const DEFAULT_CLAUDE_CODE_MODEL = 'sonnet'
 
 export interface LlmConfig {
   provider: LlmProviderKind
@@ -65,5 +66,10 @@ export function resolveConfig(env: Record<string, string | undefined>): AppConfi
     return { llm: { provider: 'openai', apiKey: trimmed(env.LLM_API_KEY), model, baseUrl } }
   }
 
-  throw new Error(`Unknown LLM_PROVIDER "${selected}"; use anthropic, openai or ollama`)
+  if (selected === 'claude-code') {
+    // The Claude Code CLI authenticates with the user's own Claude login, so no key is needed.
+    return { llm: { provider: 'claude-code', apiKey: null, model: trimmed(env.LLM_MODEL) ?? DEFAULT_CLAUDE_CODE_MODEL, baseUrl: null } }
+  }
+
+  throw new Error(`Unknown LLM_PROVIDER "${selected}"; use anthropic, openai, ollama or claude-code`)
 }

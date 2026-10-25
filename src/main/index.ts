@@ -33,6 +33,7 @@ import { captureScreenshot } from './capture/screenshot'
 import { ClaudeAnswerProvider, type MessageStreamClient } from './llm/claude-provider'
 import { DEFAULT_OPENAI_BASE_URL, parseEnv, resolveConfig, type AppConfig, type LlmConfig } from './config'
 import { OpenAICompatibleProvider } from './llm/openai-compatible-provider'
+import { ClaudeCodeProvider } from './llm/claude-code-provider'
 
 log.initialize()
 
@@ -73,6 +74,9 @@ function createProvider(llm: LlmConfig | null): AnswerProvider | null {
       client: new Anthropic({ apiKey: llm.apiKey ?? undefined }) as unknown as MessageStreamClient,
       model: llm.model,
     })
+  }
+  if (llm.provider === 'claude-code') {
+    return new ClaudeCodeProvider({ command: process.env.CLAUDE_CODE_COMMAND?.trim() || 'claude', model: llm.model })
   }
   return new OpenAICompatibleProvider({ baseUrl: llm.baseUrl ?? DEFAULT_OPENAI_BASE_URL, apiKey: llm.apiKey, model: llm.model })
 }
