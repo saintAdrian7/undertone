@@ -130,11 +130,36 @@ function ChatScreen({ state, patch }: { state: AppState; patch: Patch }) {
 export function App() {
   const { state, patch } = useAppState()
   const accent = state?.accent
+  const route = currentRoute()
+  const isSettings = route.startsWith('/settings')
   useEffect(() => {
     if (accent) document.documentElement.dataset.accent = accent
   }, [accent])
+  useEffect(() => {
+    if (!state || !isSettings) {
+      delete document.documentElement.dataset.theme
+      return
+    }
+
+    if (state.theme !== 'system') {
+      document.documentElement.dataset.theme = state.theme
+      return () => {
+        delete document.documentElement.dataset.theme
+      }
+    }
+
+    const colorScheme = window.matchMedia?.('(prefers-color-scheme: light)')
+    const applyTheme = () => {
+      document.documentElement.dataset.theme = colorScheme?.matches ? 'light' : 'dark'
+    }
+    applyTheme()
+    colorScheme?.addEventListener('change', applyTheme)
+    return () => {
+      colorScheme?.removeEventListener('change', applyTheme)
+      delete document.documentElement.dataset.theme
+    }
+  }, [isSettings, state?.theme])
   if (!state) return null
-  const route = currentRoute()
   if (route.startsWith('/settings')) return <SettingsApp />
   return route === '/chat' ? <ChatScreen state={state} patch={patch} /> : <ControlScreen state={state} patch={patch} />
 }

@@ -13,12 +13,14 @@ import { App } from './App'
 let ipc: FakeIpc
 
 beforeEach(() => {
+  vi.unstubAllGlobals()
   ipc = installFakeIpc()
   ipc.respond(IPC.getState, () => defaultState())
   ipc.respond(IPC.patchState, (patch) => ({ ...defaultState(), ...patch }))
   ipc.respond(IPC.ask, () => undefined)
   audioError.value = null
   window.location.hash = ''
+  delete document.documentElement.dataset.theme
 })
 
 describe('App', () => {
@@ -26,6 +28,7 @@ describe('App', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /start/i })).toBeTruthy())
     expect(screen.queryByRole('textbox')).toBeNull()
+    expect(document.documentElement.dataset.theme).toBeUndefined()
   })
 
   it('renders the chat panel on the /chat route', async () => {
@@ -78,6 +81,42 @@ describe('App', () => {
     ipc.respond(IPC.getState, () => ({ ...defaultState(), accent: 'violet' }))
     render(<App />)
     await waitFor(() => expect(document.documentElement.dataset.accent).toBe('violet'))
+  })
+
+  it('applies the chosen theme to the settings document', async () => {
+    window.location.hash = '#/settings'
+    ipc.respond(IPC.getState, () => ({ ...defaultState(), theme: 'light' }))
+    ipc.respond(IPC.appInfo, () => ({ name: 'Undertone', version: '0.1.0', repository: 'https://github.com/x/y' }))
+    ipc.respond(IPC.llmGet, () => null)
+    ipc.respond(IPC.profileGet, () => null)
+    render(<App />)
+    await screen.findByRole('heading', { name: /general/i })
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'))
+  })
+
+  it('follows the system colour preference in settings and leaves the overlay unchanged', async () => {
+    window.location.hash = '#/settings'
+    ipc.respond(IPC.appInfo, () => ({ name: 'Undertone', version: '0.1.0', repository: 'https://github.com/x/y' }))
+    ipc.respond(IPC.llmGet, () => null)
+    ipc.respond(IPC.profileGet, () => null)
+    let prefersLight = true
+    let changeListener: EventListenerOrEventListenerObject | undefined
+    const media = {
+      get matches() {
+        return prefersLight
+      },
+      addEventListener: vi.fn((_type: string, listener: EventListenerOrEventListenerObject) => {
+        changeListener = listener
+      }),
+      removeEventListener: vi.fn(),
+    } as unknown as MediaQueryList
+    vi.stubGlobal('matchMedia', vi.fn(() => media))
+    render(<App />)
+    await screen.findByRole('heading', { name: /general/i })
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'))
+    prefersLight = false
+    if (typeof changeListener === 'function') changeListener(new Event('change'))
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('dark'))
   })
 
   it('renders the settings screen on the /settings route', async () => {

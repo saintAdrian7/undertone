@@ -43,6 +43,14 @@ describe('SettingsApp', () => {
     await waitFor(() => expect(ipc.bridge.invoke).toHaveBeenCalledWith(IPC.patchState, { accent: 'jade' }))
   })
 
+  it('patches the appearance choice from General', async () => {
+    render(<SettingsApp />)
+    const appearance = (await screen.findByRole('combobox', { name: /appearance/i })) as HTMLSelectElement
+    expect(appearance.value).toBe('system')
+    fireEvent.change(appearance, { target: { value: 'light' } })
+    await waitFor(() => expect(ipc.bridge.invoke).toHaveBeenCalledWith(IPC.patchState, { theme: 'light' }))
+  })
+
   it('shows the current model without its key and saves a new provider', async () => {
     render(<SettingsApp />)
     await goto(/model/i)

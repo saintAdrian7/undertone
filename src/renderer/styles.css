@@ -638,7 +638,7 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  background: rgba(63, 63, 70, 0.35);
+  background: var(--sidebar-bg);
 }
 
 .settings-root .side a {
@@ -702,7 +702,7 @@ button:focus-visible {
 }
 
 .settings-root .error {
-  color: #fca5a5;
+  color: var(--danger-fg);
 }
 
 .toggle {
@@ -788,7 +788,7 @@ button:focus-visible {
   max-width: 460px;
   font: inherit;
   color: var(--fg);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--inset-bg);
   border: 1px solid var(--input);
   border-radius: 6px;
   padding: 7px 10px;
@@ -820,7 +820,7 @@ button:focus-visible {
   margin: 12px 0 0;
   padding: 10px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--inset-bg);
   white-space: pre-wrap;
   font: inherit;
   font-size: 12px;

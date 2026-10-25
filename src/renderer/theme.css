@@ -21,6 +21,8 @@
   --grey-hi: #afb3c4;
   --danger-bg: 127, 29, 29;
   --danger-fg: #fef2f2;
+  --sidebar-bg: rgba(63, 63, 70, 0.35);
+  --inset-bg: rgba(255, 255, 255, 0.04);
 
   /* ember */
   --accent-a: #b45309;
@@ -28,6 +30,29 @@
   --accent-ring: #9a3412;
   --accent-hi: #fdba74;
   --bubble: conic-gradient(from 270deg at 50% 50%, #9a3412 0deg, #fbbf24 128deg, #e11d48 202deg, #9a3412 359deg);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --glass: hsla(0, 0%, 100%, 0.86);
+  --panel: rgba(244, 244, 245, 0.92);
+  --panel-solid: #f4f4f5;
+  --card: #ffffff;
+  --fg: #18181b;
+  --muted: #e4e4e7;
+  --muted-fg: #52525b;
+  --border: rgba(24, 24, 27, 0.12);
+  --input: rgba(24, 24, 27, 0.18);
+  --ring: 0 0 0 1px rgba(24, 24, 27, 0.08), 0 -0.5px 0 0 rgba(255, 255, 255, 0.8);
+  --drop: 0 30px 20px #18181b08, 0 12px 12px #18181b0d, 0 4px 8px #18181b12;
+  --grey-a: #e4e4e7;
+  --grey-b: #d4d4d8;
+  --grey-lo: #a1a1aa;
+  --grey-hi: #fafafa;
+  --danger-bg: 254, 226, 226;
+  --danger-fg: #991b1b;
+  --sidebar-bg: rgba(24, 24, 27, 0.035);
+  --inset-bg: rgba(24, 24, 27, 0.035);
 }
 
 :root[data-accent='jade'] {

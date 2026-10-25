@@ -37,6 +37,14 @@ function GeneralPage({ state, patch }: { state: AppState; patch: Patch }) {
   return (
     <>
       <h2>General</h2>
+      <label className="field">
+        <span>Appearance</span>
+        <select aria-label="Appearance" value={state.theme} onChange={(event) => void patch({ theme: event.target.value as AppState['theme'] })}>
+          <option value="system">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
       <Toggle
         label="Automatic answers"
         hint="Answer on its own when the interviewer asks something and goes quiet."
