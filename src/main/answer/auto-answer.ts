@@ -42,8 +42,8 @@ export interface AutoAnswerScheduler {
 }
 
 /**
- * Fires `trigger` once after the interviewer asks something and then stays quiet for the delay.
- * Follow-up lines keep the question pending; the user starting to talk cancels it.
+ * Fires `trigger` once after the interviewer asks something and then stays quiet for the delay,
+ * or sooner if the user starts talking first. Follow-up lines keep the question pending.
  */
 export function createAutoAnswerScheduler(deps: AutoAnswerDeps): AutoAnswerScheduler {
   const delayMs = deps.delayMs ?? AUTO_ANSWER_DELAY_MS
@@ -78,10 +78,12 @@ export function createAutoAnswerScheduler(deps: AutoAnswerDeps): AutoAnswerSched
       else if (pending) arm()
     },
     onUserActivity(active) {
-      // The mic can pick the far side up through the speakers, so only a solo start counts as the user answering.
-      if (active && !interviewerSpeaking) {
+      // The user started answering before the quiet period ended: they need the words now, not in a second.
+      // The mic can pick the far side up through the speakers, so only a solo start counts.
+      if (active && pending && !interviewerSpeaking) {
         pending = false
         disarm()
+        deps.trigger()
       }
     },
     cancel() {
