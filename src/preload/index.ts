@@ -12,7 +12,15 @@ const INVOKE_CHANNELS = new Set<string>([
   IPC.profilePick,
   IPC.profileClear,
 ])
-const SEND_CHANNELS = new Set<string>([IPC.toggleSession, IPC.controlResetPosition, IPC.toggleChat, IPC.quit])
+const SEND_CHANNELS = new Set<string>([
+  IPC.toggleSession,
+  IPC.controlResetPosition,
+  IPC.controlDrag,
+  IPC.controlDragEnd,
+  IPC.openSettings,
+  IPC.toggleChat,
+  IPC.quit,
+])
 const EVENT_CHANNELS = new Set<string>([
   IPC.stateUpdated,
   IPC.chatSubmit,

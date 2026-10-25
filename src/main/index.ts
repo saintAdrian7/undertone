@@ -19,7 +19,8 @@ import { basename, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import log from 'electron-log/main'
 import Anthropic from '@anthropic-ai/sdk'
-import { AskRequestSchema, CancelRequestSchema, IPC, TranscriptOpSchema, type EventMap } from '@shared/ipc'
+import { AskRequestSchema, CancelRequestSchema, ControlDragSchema, IPC, TranscriptOpSchema, type EventMap } from '@shared/ipc'
+import { APP_NAME } from '@shared/brand'
 import type { AnswerProvider, Screenshot } from '@shared/providers'
 import { RendererPatchSchema, type AppState, type ShortcutKey } from '@shared/state'
 import { applyTranscriptOp } from '@shared/transcript'
@@ -365,6 +366,9 @@ function main(): void {
       guard(event)
       const sender = event.sender
       void answers.ask(AskRequestSchema.parse(request), (channel, payload) => {
+        // The pill shimmers its Ask label while an answer streams.
+        if (channel === IPC.answerStarted) store.patch({ isAnswering: true })
+        else if (channel === IPC.answerDone || channel === IPC.answerError) store.patch({ isAnswering: false })
         if (!sender.isDestroyed()) sender.send(channel, payload)
       })
     })
@@ -383,6 +387,23 @@ function main(): void {
     ipcMain.on(IPC.controlResetPosition, (event) => {
       guard(event)
       manager.resetControlPosition()
+    })
+    // The pill is dragged by hand (no native drag region) so a plain click can open settings.
+    ipcMain.on(IPC.controlDrag, (event, position: unknown) => {
+      guard(event)
+      const { x, y } = ControlDragSchema.parse(position)
+      const control = windowsByKind.get('control')
+      if (control && !control.isDestroyed()) control.setPosition(x, y)
+    })
+    ipcMain.on(IPC.controlDragEnd, (event) => {
+      guard(event)
+      const control = windowsByKind.get('control')
+      if (control && !control.isDestroyed()) manager.setControlPosition(control.getBounds())
+    })
+    ipcMain.on(IPC.openSettings, (event) => {
+      guard(event)
+      // The settings window arrives in the next step; until then a pill click shows the panel.
+      store.patch({ showChat: true })
     })
     ipcMain.on(IPC.toggleSession, (event) => {
       guard(event)
@@ -416,7 +437,7 @@ function main(): void {
     const icon = nativeImage.createFromBuffer(Buffer.from(renderTrayIconPng({ listening: state.isListening })))
     if (!tray) {
       tray = new Tray(icon)
-      tray.setToolTip('Meeting Copilot')
+      tray.setToolTip(APP_NAME)
       tray.on('click', () => store.patch({ showChat: !store.get().showChat }))
     } else {
       tray.setImage(icon)

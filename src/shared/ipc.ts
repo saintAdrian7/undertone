@@ -62,9 +62,15 @@ export interface InvokeMap {
   [IPC.profileClear]: { request: undefined; response: void }
 }
 
+export const ControlDragSchema = z.strictObject({ x: z.number().int(), y: z.number().int() })
+export type ControlDrag = z.infer<typeof ControlDragSchema>
+
 export interface SendMap {
   [IPC.toggleSession]: undefined
   [IPC.controlResetPosition]: undefined
+  [IPC.controlDrag]: ControlDrag
+  [IPC.controlDragEnd]: undefined
+  [IPC.openSettings]: undefined
   [IPC.toggleChat]: undefined
   [IPC.quit]: undefined
 }

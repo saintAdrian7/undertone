@@ -1,0 +1,47 @@
+/*
+ * Colour tokens. The overlay is a dark translucent sheet with one accent family; swap the
+ * accent by changing `data-accent` on <html> (ember, jade, violet) or by editing these values.
+ */
+:root {
+  color-scheme: dark;
+  --glass: hsla(252, 10%, 10%, 0.8);
+  --panel: rgba(24, 24, 27, 0.8);
+  --panel-solid: #18181b;
+  --card: #1f1f23;
+  --fg: #fafafa;
+  --muted: #3f3f46;
+  --muted-fg: #a1a1aa;
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.15);
+  --ring: 0 0 0 1px rgba(207, 226, 255, 0.24), 0 -0.5px 0 0 rgba(255, 255, 255, 0.8);
+  --drop: 0 85px 34px #00000005, 0 48px 29px #00000014, 0 21px 21px #00000021, 0 5px 12px #00000029;
+  --grey-a: #2e3039;
+  --grey-b: #272a31;
+  --grey-lo: #16171a;
+  --grey-hi: #afb3c4;
+  --danger-bg: 127, 29, 29;
+  --danger-fg: #fef2f2;
+
+  /* ember */
+  --accent-a: #b45309;
+  --accent-b: #7c2d12;
+  --accent-ring: #9a3412;
+  --accent-hi: #fdba74;
+  --bubble: conic-gradient(from 270deg at 50% 50%, #9a3412 0deg, #fbbf24 128deg, #e11d48 202deg, #9a3412 359deg);
+}
+
+:root[data-accent='jade'] {
+  --accent-a: #047857;
+  --accent-b: #064e3b;
+  --accent-ring: #065f46;
+  --accent-hi: #6ee7b7;
+  --bubble: conic-gradient(from 270deg at 50% 50%, #065f46 0deg, #2dd4bf 128deg, #84cc16 202deg, #065f46 359deg);
+}
+
+:root[data-accent='violet'] {
+  --accent-a: #6d28d9;
+  --accent-b: #4c1d95;
+  --accent-ring: #5b21b6;
+  --accent-hi: #c4b5fd;
+  --bubble: conic-gradient(from 270deg at 50% 50%, #4c1d95 0deg, #38bdf8 128deg, #d946ef 202deg, #4c1d95 359deg);
+}

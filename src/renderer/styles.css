@@ -1,14 +1,7 @@
-:root {
-  color-scheme: dark;
-  --bg: rgba(20, 20, 24, 0.82);
-  --bg-strong: rgba(20, 20, 24, 0.94);
-  --fg: #f3f3f5;
-  --muted: #a4a4ad;
-  --accent: #6ee7b7;
-  --danger: #fca5a5;
-  --radius: 14px;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: 13px;
+@import './theme.css';
+
+* {
+  box-sizing: border-box;
 }
 
 html,
@@ -19,35 +12,108 @@ body,
   background: transparent;
   overflow: hidden;
   user-select: none;
+  font-family: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
 }
 
 button {
   font: inherit;
-  color: var(--fg);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  padding: 4px 10px;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
   cursor: pointer;
   -webkit-app-region: no-drag;
 }
 
-button:hover {
-  background: rgba(255, 255, 255, 0.16);
+button:focus,
+button:focus-visible {
+  outline: none;
 }
 
-button[aria-pressed="true"] {
-  background: var(--accent);
-  color: #0b1f17;
-  border-color: transparent;
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
-button.listening {
-  background: var(--danger);
-  color: #3b0a0a;
+/* Gradient buttons shared by the pill and the panel. */
+.btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #fff;
+  font-weight: 600;
+  font-size: 12px;
+  border-radius: 999px;
+  transition:
+    transform 150ms,
+    filter 150ms;
 }
 
-/* Control bar: the small pill at the top of the screen. */
+.btn:hover {
+  transform: scale(1.05);
+  filter: brightness(1.25);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.btn.accent {
+  background: linear-gradient(var(--accent-a), var(--accent-b));
+  box-shadow:
+    0 0 0 0.5px var(--accent-ring),
+    var(--drop),
+    inset 0 -1px var(--accent-b),
+    inset 0 0.5px var(--accent-hi);
+}
+
+.btn.grey {
+  background: linear-gradient(var(--grey-a), var(--grey-b));
+  box-shadow:
+    var(--drop),
+    inset 0 -1px var(--grey-lo),
+    inset 0 0.5px var(--grey-hi);
+}
+
+.btn.round {
+  width: 32px;
+  height: 32px;
+}
+
+.btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Text shimmer while an answer streams. */
+.shimmer {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.55) 20%, #fff 50%, rgba(255, 255, 255, 0.55) 80%) 0 0 / 220% 100%;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: shimmer 1.6s linear infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: -180% 0;
+  }
+  to {
+    background-position: 180% 0;
+  }
+}
+
+/* Control pill ------------------------------------------------------------- */
 .control-root {
   height: 100%;
   display: flex;
@@ -55,143 +121,499 @@ button.listening {
   justify-content: center;
 }
 
-.control-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  background: var(--bg);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 999px;
-  backdrop-filter: blur(12px);
-  -webkit-app-region: drag;
-  white-space: nowrap;
-}
-
-.control-bar .speaker {
-  color: var(--muted);
-  padding: 0 4px;
-}
-
 .control-measure {
   display: inline-flex;
 }
 
-/* Chat panel: transcript, streamed answer and composer. The window follows the panel's measured height. */
+.pill {
+  position: relative;
+  height: 50px;
+  padding: 2px;
+}
+
+.pill-main {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 0 9px 0 8px;
+  border-radius: 999px;
+  box-shadow: var(--ring);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.pill-body {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: default;
+}
+
+.pill-bg {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--glass);
+  pointer-events: none;
+  transition: filter 75ms;
+}
+
+.pill-body:hover ~ .pill-bg {
+  filter: brightness(3);
+}
+
+.pill-logo {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 26px;
+  height: 26px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: #fff;
+}
+
+.pill-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 46px;
+}
+
+.btn.ask {
+  height: 32px;
+  width: 66px;
+  overflow: visible;
+}
+
+.btn.ask svg {
+  width: 12px;
+  height: 12px;
+}
+
+.btn.ask .layer {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  transition: opacity 200ms ease-out;
+  pointer-events: none;
+}
+
+.btn.ask .layer.accent {
+  background: linear-gradient(var(--accent-a), var(--accent-b));
+  box-shadow:
+    0 0 0 0.5px var(--accent-ring),
+    var(--drop),
+    inset 0 -1px var(--accent-b),
+    inset 0 0.5px var(--accent-hi);
+}
+
+.btn.ask .layer.grey {
+  background: linear-gradient(var(--grey-a), var(--grey-b));
+  box-shadow:
+    var(--drop),
+    inset 0 -1px var(--grey-lo),
+    inset 0 0.5px var(--grey-hi);
+}
+
+.btn.ask .content {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Answer panel -------------------------------------------------------------- */
 .chat-root {
-  padding: 6px;
-  box-sizing: border-box;
+  padding: 2px;
 }
 
 .chat-measure {
   display: flow-root;
 }
 
-.chat-panel {
+.panel {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  box-sizing: border-box;
-  background: var(--bg-strong);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius);
-  backdrop-filter: blur(12px);
-  color: var(--fg);
+  min-height: 136px;
+  border-radius: 16px;
+  box-shadow: var(--ring);
+  overflow: hidden;
+  transition: border-radius 200ms ease-out;
 }
 
-.transcript {
-  flex: 0 0 auto;
-  max-height: 240px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.panel.expanded {
+  border-radius: 18px;
+}
+
+.panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--panel);
+}
+
+.panel-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.hide-zone {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  width: 44px;
+  height: 44px;
+  padding: 8px;
+  display: flex;
+  align-items: flex-start;
+}
+
+.hide-zone .btn {
+  width: 28px;
+  height: 28px;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition:
+    opacity 150ms ease-out,
+    transform 150ms ease-out;
+}
+
+.panel:hover .hide-zone .btn {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.panel:hover .hide-zone .btn:hover {
+  transform: scale(1.05);
+}
+
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 12px;
+  max-height: 360px;
   overflow-y: auto;
-  user-select: text;
+  font-size: 13.5px;
+  line-height: 1.5;
 }
 
-.transcript li {
-  display: grid;
-  grid-template-columns: 3.2em 6.5em 1fr;
-  gap: 6px;
-  padding: 2px 0;
+.messages .line {
+  max-width: 85%;
 }
 
-.transcript .time {
-  color: var(--muted);
+.messages .time {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 11px;
+  color: var(--muted-fg);
   font-variant-numeric: tabular-nums;
 }
 
-.transcript .speaker {
-  color: var(--muted);
-}
-
-.transcript li.me .speaker {
-  color: var(--accent);
-}
-
-.answer {
-  flex: 1 1 auto;
-  max-height: 560px;
-  overflow-y: auto;
-  white-space: pre-wrap;
+.messages .them {
+  color: var(--muted-fg);
   user-select: text;
 }
 
-.answer p {
-  margin: 0 0 6px;
-  line-height: 1.45;
+.messages .me {
+  position: relative;
+  align-self: flex-end;
+  max-width: 70%;
+  padding: 7px 11px;
+  border-radius: 11px 11px 4px 11px;
+  color: #fff;
+  user-select: text;
 }
 
-.answer .thinking,
-.audio-error {
-  color: var(--muted);
+.messages .me::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  border-radius: inherit;
+  background: var(--bubble);
+  filter: blur(1px);
 }
 
-.answer [role="alert"],
-.audio-error {
-  color: var(--danger);
+.messages .me::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: radial-gradient(94% 74% at 69% 64%, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0));
+}
+
+.messages .me .time {
+  text-align: right;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.messages .answer {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.messages .caption {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: var(--muted-fg);
+}
+
+.thinking {
+  margin: 0;
+}
+
+.thinking .dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(250, 250, 250, 0.9);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.model-status {
+  margin: 0;
+  padding: 8px 12px 0;
+  font-size: 12px;
+  color: var(--muted-fg);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 36px 16px 22px;
+  color: var(--muted-fg);
+  font-size: 13px;
+  text-align: center;
+}
+
+.empty .glyph {
+  width: 34px;
+  height: 34px;
+  opacity: 0.4;
+}
+
+.empty .btn.accent {
+  height: 30px;
+  padding: 0 16px;
 }
 
 .composer {
-  display: flex;
-  gap: 6px;
+  position: relative;
+  padding: 6px 10px 10px;
 }
 
-.composer input {
-  flex: 1;
+.composer textarea {
+  display: block;
+  width: 100%;
+  min-height: 76px;
+  resize: none;
+  padding: 10px 44px 10px 8px;
   font: inherit;
+  font-weight: 500;
+  font-size: 13px;
+  line-height: 20px;
   color: var(--fg);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  padding: 7px 10px;
+  background: transparent;
+  border: 0.5px solid var(--input);
+  border-radius: 6px;
   outline: none;
+  user-select: text;
 }
 
-.composer input:focus {
-  border-color: var(--accent);
+.composer textarea::placeholder {
+  color: var(--muted-fg);
 }
 
-.profile-row {
+.composer .send {
+  position: absolute;
+  right: 17px;
+  bottom: 17px;
+  width: 24px;
+  height: 24px;
+}
+
+.composer .send svg {
+  width: 10px;
+  height: 10px;
+}
+
+.composer .menu-anchor {
+  position: absolute;
+  right: 46px;
+  bottom: 17px;
+}
+
+.composer .more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.6);
+  transition:
+    background-color 150ms,
+    color 150ms,
+    transform 150ms;
+}
+
+.composer .more:hover,
+.composer .more[aria-expanded='true'] {
+  background: rgba(161, 161, 170, 0.15);
+  color: var(--fg);
+  transform: scale(1.05);
+}
+
+.error-strip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
-  opacity: 0.85;
+  padding: 70px 10px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--danger-fg);
+  background: linear-gradient(
+    to top,
+    rgba(var(--danger-bg), 0.95),
+    rgba(var(--danger-bg), 0.84) 28%,
+    rgba(var(--danger-bg), 0.58) 56%,
+    rgba(var(--danger-bg), 0.24) 82%,
+    rgba(var(--danger-bg), 0)
+  );
+  animation: rise 180ms ease-out;
+  pointer-events: none;
 }
 
-.profile-row .link {
-  background: none;
-  border: none;
-  padding: 0;
-  color: inherit;
-  text-decoration: underline;
+.error-strip > * {
+  pointer-events: auto;
+}
+
+.error-strip .message {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.error-strip .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid rgba(254, 226, 226, 0.2);
+  background: rgba(254, 242, 242, 0.12);
+  color: var(--danger-fg);
+  transition: transform 150ms;
+}
+
+.error-strip .chip:hover {
+  transform: scale(1.03);
+}
+
+.error-strip .chip svg {
+  width: 12px;
+  height: 12px;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+/* Popover menu --------------------------------------------------------------- */
+.menu-anchor {
+  position: relative;
+}
+
+.menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 5;
+  min-width: 230px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--drop);
+  animation: rise 150ms ease-out;
+}
+
+.menu li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  white-space: nowrap;
   cursor: pointer;
-  font: inherit;
 }
 
-.profile-row [role='alert'] {
-  color: #ff8a80;
+.menu li:hover {
+  background: var(--muted);
+}
+
+.menu li.separator {
+  height: 1px;
+  padding: 0;
+  margin: 4px 2px;
+  background: var(--border);
+  cursor: default;
+}
+
+.menu li.label {
+  color: var(--muted-fg);
+  cursor: default;
+  font-size: 11.5px;
+}
+
+.menu li.label:hover {
+  background: none;
+}
+
+.menu .check {
+  width: 14px;
+  height: 14px;
+  color: var(--accent-hi);
+}
+
+.menu .spacer {
+  width: 14px;
 }
