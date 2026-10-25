@@ -1,60 +1,61 @@
 # Undertone
 
-A local-only desktop copilot for live conversations. It floats a small capture-proof overlay over your screen, listens to both sides of a call, keeps a running transcript, and streams answers from Claude into the panel when you ask.
+An open-source interview and meeting copilot for Windows (macOS overlay works; system-audio capture is Windows-only for now). A small capture-proof pill floats at the top of your screen; press Start and it listens to both sides of the call, transcribes locally, and whispers what to say next a second after the interviewer stops talking. Bring your own model: your Claude Code login, an Anthropic key, any OpenAI-compatible server, or Ollama on your own machine.
 
-Audio capture, voice detection and transcription run on your machine. Two things leave it: when an answer is generated, the recent transcript, your uploaded resume (if any) and (if the **Screen** toggle is on) a screenshot of your display are sent to the model you configured; and the Whisper model is downloaded from Hugging Face the first time it is used. Nothing else is fetched at runtime; the voice-activity model and ONNX runtime are bundled from `node_modules`.
+<p align="center">
+  <img src="docs/screenshots/control.png" alt="The control pill: Hide, Auto answers and Stop buttons" height="50">
+</p>
+<p align="center">
+  <img src="docs/screenshots/chat.png" alt="The answer panel before a session starts" width="540">
+</p>
 
-## Setup
+## What it does
 
-Requirements: Node.js 22+, Windows 10/11 (macOS works for the overlay but system audio capture is Windows-only in this version).
+- **Listens to both sides.** Your microphone and the system audio (the other party) are captured separately, so the transcript knows who said what.
+- **Transcribes on your machine.** Silero voice detection plus Whisper through transformers.js (WebGPU when available, WASM otherwise). Nothing is uploaded to transcribe.
+- **Answers on its own.** When the interviewer asks something and goes quiet, the answer starts streaming without you touching anything. If you start talking first, it starts right away. Turn it off with the Auto button.
+- **Sounds like you.** Upload your resume or notes once; every answer draws on it. Answers are written as spoken, first-person sentences, two to four of them, with no bullet points or assistant tone.
+- **Sees your screen when you want.** With Screen on, a screenshot (with the overlay hidden) goes along with each question, so it can answer about a slide or a coding problem.
+- **Invisible to screen share.** One toggle sets the operating system's content-protection flag, so meeting apps and recorders capture everything except Undertone.
+- **Your choice of model.** Claude Code CLI (no key, uses your Claude login, kept warm for one-to-two-second answers), Anthropic API, OpenAI-compatible servers (OpenRouter, Groq, LM Studio, vLLM) or Ollama. Switch from the Settings window; the key never leaves the main process.
+
+## Install
+
+Requirements: Node.js 22+. Windows 10 or 11 for system-audio capture.
 
 ```bash
+git clone https://github.com/saintAdrian7/undertone.git
+cd undertone
 npm install
-copy .env.example .env
+npm run dev
 ```
 
-Pick a model in `.env`. Claude is the default when its key is set:
+The first start downloads the Whisper model from Hugging Face (about 150 MB for `whisper-base`); it is cached afterwards. Everything else is bundled.
+
+Pick a model in **Settings** (click the pill) or in a `.env` file copied from `.env.example`:
 
 ```
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
-If you have Claude Code installed and signed in, the app can answer through it with no API key at all. This uses your Claude subscription; `LLM_MODEL` takes the CLI's model names such as `haiku` (fastest), `sonnet` or `opus`. The app keeps one CLI process open for the whole session (started when the app launches and whenever you press **Start**), sends each question with only the transcript lines the model has not seen yet, and passes screenshots inline, so answers after the first typically begin within a second or two:
-
-```
+# Claude Code CLI, signed in on this machine (no key; haiku is fastest, sonnet answers best)
 LLM_PROVIDER=claude-code
 LLM_MODEL=sonnet
-```
 
-Any OpenAI-compatible server works too, which is the easy way to test with free or local models:
+# Anthropic API
+ANTHROPIC_API_KEY=sk-ant-...
 
-```
-# OpenRouter free tier
+# Any OpenAI-compatible server
 LLM_PROVIDER=openai
 LLM_BASE_URL=https://openrouter.ai/api/v1
-LLM_API_KEY=sk-or-...
+LLM_API_KEY=...
 LLM_MODEL=meta-llama/llama-3.3-70b-instruct:free
 
-# Ollama on this machine (no key)
+# Ollama on this machine
 LLM_PROVIDER=ollama
 LLM_MODEL=llama3.2
 ```
 
-Groq (`https://api.groq.com/openai/v1`), LM Studio (`http://localhost:1234/v1`) and vLLM use the same `openai` form. Screenshots are sent as image parts, so pick a vision-capable model if you keep the **Screen** toggle on; text-only models still work for the transcript.
+Settings chosen in the window override `.env`. Screenshots are sent as image parts, so pick a vision-capable model if you keep Screen on; text-only models still work for the transcript.
 
-Run in development:
-
-```bash
-npm run dev
-```
-
-Build a production bundle:
-
-```bash
-npm run build
-```
-
-Package an unpacked Windows app into `dist/win-unpacked` (electron-builder; the afterPack hook flips the Electron fuses so the shipped binary cannot run as Node, cannot be attached with `--inspect`, and only loads code from its asar):
+To package a Windows build into `dist/win-unpacked` (electron-builder flips the Electron fuses so the shipped binary cannot run as Node, cannot be attached with `--inspect`, and only loads code from its asar):
 
 ```bash
 npm run dist
@@ -64,20 +65,28 @@ npm run dist
 
 | Action | How |
 |---|---|
-| Start / stop listening | Click **Start** on the bar, or `Ctrl+Shift+\` |
-| Show / hide the answer panel | Click **Ask** on the bar |
-| Get answers automatically | **Auto on** (the default) on the bar: when the interviewer asks something and goes quiet for about a second, the answer starts on its own; if you start talking first, it starts right away. **Auto off** leaves it to you. |
-| Ask for an answer yourself | Type in the panel and press Enter, or press `Ctrl+Enter` anywhere for "What should I say next?" |
-| Make answers sound like you | Click **Upload resume** at the top of the panel and pick a `.txt`, `.md` or `.pdf`. The text is kept in the app's user-data folder and sent with every question so answers draw on your real experience; **Remove** forgets it. |
-| Hide from screen share | Click **Shown/Hidden** on the bar, or `Ctrl+\` |
-| Move the bar | Drag it, or `Ctrl+Arrow keys`. Double-click to reset. |
-| Scroll the transcript | `Ctrl+Shift+Up/Down` |
-| Clear the answer | `Ctrl+R` |
-| Tray icon | Click to show or hide the panel; right-click for listening, invisibility and Quit. The dot turns red while listening. |
+| Start or stop listening | The round button on the pill, the **Start listening** button in the panel, or `Ctrl+Shift+\` |
+| Show or hide the panel | **Ask** / **Hide** on the pill, or the chevron that appears at the panel's top-left |
+| Automatic answers | The lightning button on the pill (accent colour = on) |
+| Ask something yourself | Type in the panel and press Enter, or `Ctrl+Enter` anywhere for "What should I say next?" |
+| Screenshots, invisibility, resume, quit | The **⋯** menu next to the send button |
+| Open Settings | Click the pill body, or the tray menu |
+| Move the pill | Drag it, or `Ctrl+Arrow keys`. Double-click to reset. |
+| Scroll the answer | `Ctrl+Shift+Up/Down` |
+| Clear the answer | `Ctrl+R` or the **⋯** menu |
+| Hide from screen share | `Ctrl+\`, the **⋯** menu, or Settings |
 
-When the panel is hidden from screen share it uses the operating system's content-protection flag, so screen recorders and meeting apps capture everything except the copilot windows.
+Settings has six sections: General (automatic answers, screenshots, invisibility, focus, accent colour, open at login), Model, Profile (resume preview), Audio (microphone), Shortcuts (click to record, double-click to reset) and About.
 
-Global shortcuts are first come, first served across the whole desktop. If another app already owns one (Cluely, for example, uses the same `Ctrl+Shift+\`), the log reports `Failed to register global shortcut` and that action stays available from the bar; the defaults live in `src/shared/state.ts`.
+Global shortcuts are first come, first served across the desktop. If another app owns one, the log reports it and that action stays available from the pill.
+
+## Privacy
+
+Audio capture, voice detection and transcription never leave your machine. When an answer is generated, the recent transcript, your resume (if uploaded) and, with Screen on, a screenshot are sent to the model you configured and nowhere else. The resume text and model settings live in the app's user-data folder; the API key is stored there too and is never shown back to the interface. Nothing is fetched at runtime except the Whisper model on first use.
+
+## Please use it fairly
+
+Undertone is a tool for preparing, practising and staying composed. Many employers forbid live assistance in interviews; check the rules of whatever you are joining and be honest about what you use. The authors do not endorse deceiving an interviewer.
 
 ## How it works
 
@@ -88,26 +97,28 @@ system audio ─────────┘                                     
 (loopback via getDisplayMedia)                                      ▼
                                                         transcript in shared state
                                                                     │
-Ctrl+Enter / Enter ─ screenshot (overlay hidden) ─ Claude API (main process) ─ streamed answer
+auto trigger / Ctrl+Enter ─ screenshot (overlay hidden) ─ model provider (main process) ─ streamed answer
 ```
 
-- `src/main` is the Electron main process: window management, global shortcuts, screenshot capture, the Claude provider, and the IPC handlers. The API key never leaves this process.
-- `src/renderer` is the React UI plus the audio pipeline. Transcription runs here with WebGPU when available, WASM otherwise.
-- `src/shared` holds the state schema, the IPC contract, and the provider interfaces.
+- `src/main` is the Electron main process: windows, global shortcuts, screenshot capture, the model providers, the answer service with the auto-answer scheduler, and the IPC handlers. Keys never leave this process.
+- `src/renderer` is the React UI (pill, panel, settings) plus the audio pipeline.
+- `src/shared` holds the state schema, the IPC contract, the provider interfaces and the brand constants.
+- `docs/superpowers/specs` holds the UI design notes.
+
+The UI follows the layout and interaction patterns of Cluely's overlay, rebuilt from scratch with our own styles, icons and assets.
 
 ## Configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | | Selects Claude |
-| `ANTHROPIC_MODEL` | `claude-sonnet-5-5` | Claude model |
-| `LLM_PROVIDER` | | `claude-code`, `openai`, `ollama` or `anthropic` |
+| `LLM_PROVIDER` | | `claude-code`, `anthropic`, `openai` or `ollama` |
+| `LLM_MODEL` | | Model name for that provider |
 | `LLM_BASE_URL` | OpenAI or Ollama default | `/v1` base of an OpenAI-compatible server |
 | `LLM_API_KEY` | | Key for that server (Ollama needs none) |
-| `LLM_MODEL` | | Model name on that server |
+| `ANTHROPIC_API_KEY` | | Selects the Anthropic API when `LLM_PROVIDER` is unset |
+| `ANTHROPIC_MODEL` | `claude-sonnet-5-5` | Anthropic model |
+| `CLAUDE_CODE_COMMAND` | `claude` | Path to the Claude Code CLI if it is not on PATH |
 | `VITE_WHISPER_MODEL` | `onnx-community/whisper-base` | Any Whisper model published for transformers.js |
-| `VITE_VAD_ASSETS_URL` | jsDelivr | Where the VAD worklet and ONNX files are served from |
-| `VITE_ORT_WASM_URL` | jsDelivr | Where onnxruntime-web's WASM files are served from |
 
 ## Development
 
@@ -118,4 +129,8 @@ npm run typecheck
 npm run lint
 ```
 
-The main-process logic is written as pure modules with Electron injected at the edges, so the overlay, shortcut, capture and provider behaviour is covered by fast unit tests without launching Electron.
+Main-process logic is written as pure modules with Electron injected at the edges, so overlay, shortcut, capture, auto-answer and provider behaviour is covered by fast tests without launching Electron. The project was built test-first; each feature landed as a failing-test commit followed by the implementation.
+
+## Licence
+
+MIT. Fonts: Inter (SIL Open Font License) via `@fontsource-variable/inter`. Icons: Lucide (ISC).
