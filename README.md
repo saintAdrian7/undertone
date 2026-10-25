@@ -1,4 +1,4 @@
-# Meeting Copilot
+# Undertone
 
 A local-only desktop copilot for live conversations. It floats a small capture-proof overlay over your screen, listens to both sides of a call, keeps a running transcript, and streams answers from Claude into the panel when you ask.
 

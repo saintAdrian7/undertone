@@ -1,7 +1,7 @@
 {
-  "name": "meeting-copilot",
+  "name": "undertone",
   "version": "0.1.0",
-  "description": "Local-only meeting copilot: capture-proof overlay, live transcription, streamed answers.",
+  "description": "Open-source interview and meeting copilot: a capture-proof overlay that listens to both sides of a call, transcribes locally and whispers what to say next.",
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
@@ -49,8 +49,8 @@
     "vitest": "^5.0.5"
   },
   "build": {
-    "appId": "dev.local.meeting-copilot",
-    "productName": "Meeting Copilot",
+    "appId": "app.undertone.desktop",
+    "productName": "Undertone",
     "files": [
       "out/**",
       "package.json"
@@ -65,5 +65,11 @@
         "dir"
       ]
     }
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/saintAdrian7/undertone.git"
+  },
+  "homepage": "https://github.com/saintAdrian7/undertone"
 }
