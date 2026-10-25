@@ -8,6 +8,8 @@ export interface AnswerServiceDeps {
   provider: AnswerProvider | null
   getState(): AppState
   capture(): Promise<Screenshot>
+  /** The user's resume or notes, when uploaded. */
+  getProfile?(): string | null
   log: { warn(message: string): void }
 }
 
@@ -50,7 +52,7 @@ export function createAnswerService(deps: AnswerServiceDeps): AnswerService {
         if (!isCurrent()) return
         send(IPC.answerStarted, { requestId, screenshotAttached: screenshot !== undefined })
         // Read the transcript after the capture so the prompt reflects what was said while it ran.
-        const request = { question, transcript: deps.getState().transcript, screenshot }
+        const request = { question, transcript: deps.getState().transcript, screenshot, profile: deps.getProfile?.() ?? null }
         for await (const chunk of deps.provider.stream(request, controller.signal)) {
           if (!isCurrent()) break
           send(IPC.answerChunk, { requestId, text: chunk })

@@ -58,6 +58,10 @@ export const AppStateSchema = z.object({
   transcript: z.array(TranscriptEntrySchema).max(MAX_TRANSCRIPT_ENTRIES).default([]),
   meHasVoiceActivity: z.boolean().default(false),
   themHasVoiceActivity: z.boolean().default(false),
+  /** Generate an answer on its own when the interviewer asks something and goes quiet. */
+  autoAnswer: z.boolean().default(true),
+  /** File name of the uploaded resume or notes, kept by the main process. */
+  profileName: z.string().nullable().default(null),
 })
 
 export type AppState = z.infer<typeof AppStateSchema>
@@ -80,6 +84,7 @@ export const RendererPatchSchema = z.strictObject({
   theme: ThemeSchema.optional(),
   meHasVoiceActivity: z.boolean().optional(),
   themHasVoiceActivity: z.boolean().optional(),
+  autoAnswer: z.boolean().optional(),
 })
 
 export type RendererPatch = z.infer<typeof RendererPatchSchema>

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { IPC } from '@shared/ipc'
 import { MAX_CHAT_HEIGHT, MAX_CONTROL_WIDTH, MIN_CONTROL_WIDTH, type AppState, type RendererPatch } from '@shared/state'
 import { useAppState } from './state/useAppState'
@@ -35,6 +35,7 @@ function ControlScreen({ state, patch }: { state: AppState; patch: Patch }) {
           onToggleChat={() => window.ipc.send(IPC.toggleChat, undefined)}
           onToggleInvisible={() => void patch({ isInvisible: !state.isInvisible })}
           onToggleScreenUse={() => void patch({ screenUse: state.screenUse === 'required' ? 'off' : 'required' })}
+          onToggleAutoAnswer={() => void patch({ autoAnswer: !state.autoAnswer })}
           onQuit={() => window.ipc.send(IPC.quit, undefined)}
         />
       </div>
@@ -47,6 +48,17 @@ function ChatScreen({ state, patch }: { state: AppState; patch: Patch }) {
   const { error: audioError, modelStatus } = useAudioPipeline(state, patch)
   const root = useRef<HTMLDivElement>(null)
   const content = useRef<HTMLDivElement>(null)
+  const [profileError, setProfileError] = useState<string | null>(null)
+  const pickProfile = useCallback(() => {
+    window.ipc
+      .invoke(IPC.profilePick, undefined)
+      .then((message) => setProfileError(message))
+      .catch((error: unknown) => setProfileError(error instanceof Error ? error.message : String(error)))
+  }, [])
+  const clearProfile = useCallback(() => {
+    setProfileError(null)
+    void window.ipc.invoke(IPC.profileClear, undefined)
+  }, [])
   // The panel's content decides the window height, within the configured cap.
   useContentSize(content, ({ height }) => {
     void patch({ chatWindowIsExpanded: true, chatExpandedHeight: clamp(height + WINDOW_PADDING_PX, CHAT_MIN_HEIGHT, MAX_CHAT_HEIGHT) })
@@ -85,8 +97,12 @@ function ChatScreen({ state, patch }: { state: AppState; patch: Patch }) {
           error={error}
           screenshotAttached={screenshotAttached}
           modelStatus={modelStatus}
+          profileName={state.profileName}
+          profileError={profileError}
           onAsk={ask}
           onClear={clear}
+          onPickProfile={pickProfile}
+          onClearProfile={clearProfile}
         />
       </div>
     </div>

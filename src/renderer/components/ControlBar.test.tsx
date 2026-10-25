@@ -13,6 +13,7 @@ function setup(patch: Partial<AppState> = {}) {
     onToggleChat: vi.fn(),
     onToggleInvisible: vi.fn(),
     onToggleScreenUse: vi.fn(),
+    onToggleAutoAnswer: vi.fn(),
   }
   render(<ControlBar {...props} />)
   return props
@@ -51,6 +52,14 @@ describe('ControlBar', () => {
     expect(button.getAttribute('aria-pressed')).toBe('true')
     fireEvent.click(button)
     expect(props.onToggleInvisible).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows whether answers come automatically and toggles it', () => {
+    const props = setup({ autoAnswer: false })
+    const button = screen.getByRole('button', { name: /automatic answers/i })
+    expect(button.getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(button)
+    expect(props.onToggleAutoAnswer).toHaveBeenCalledTimes(1)
   })
 
   it('shows who is speaking', () => {

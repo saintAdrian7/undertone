@@ -12,13 +12,30 @@ export interface ChatPanelProps {
   error: string | null
   screenshotAttached?: boolean
   modelStatus?: ModelStatus
+  profileName?: string | null
+  profileError?: string | null
   onAsk(question: string): void
   onClear(): void
+  onPickProfile?(): void
+  onClearProfile?(): void
 }
 
 const speaker = (entry: TranscriptEntry): string => (entry.role === 'them' ? 'Interviewer' : 'Me')
 
-export function ChatPanel({ transcript, answer, status, error, screenshotAttached = false, modelStatus = 'idle', onAsk, onClear }: ChatPanelProps) {
+export function ChatPanel({
+  transcript,
+  answer,
+  status,
+  error,
+  screenshotAttached = false,
+  modelStatus = 'idle',
+  profileName = null,
+  profileError = null,
+  onAsk,
+  onClear,
+  onPickProfile,
+  onClearProfile,
+}: ChatPanelProps) {
   const [draft, setDraft] = useState('')
 
   const submit = () => {
@@ -36,6 +53,30 @@ export function ChatPanel({ transcript, answer, status, error, screenshotAttache
 
   return (
     <div className="chat-panel">
+      {onPickProfile && (
+        <div className="profile-row">
+          {profileName ? (
+            <>
+              <span className="profile-name" title="Answers draw on this resume">
+                Resume: {profileName}
+              </span>
+              <button type="button" className="link" onClick={onPickProfile} aria-label="Replace resume">
+                Replace
+              </button>
+              {onClearProfile && (
+                <button type="button" className="link" onClick={onClearProfile} aria-label="Remove resume">
+                  Remove
+                </button>
+              )}
+            </>
+          ) : (
+            <button type="button" className="link" onClick={onPickProfile} aria-label="Upload resume">
+              Upload resume (.txt, .md or .pdf) so answers sound like you
+            </button>
+          )}
+          {profileError && <span role="alert">{profileError}</span>}
+        </div>
+      )}
       {modelStatus === 'loading' && <p className="model-status">Loading speech model…</p>}
       <ol className="transcript" aria-label="Transcript">
         {transcript.map((entry) => (

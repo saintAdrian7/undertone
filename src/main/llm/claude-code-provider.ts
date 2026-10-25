@@ -1,11 +1,14 @@
 import { spawn as nodeSpawn } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
-import { unlink, writeFile as fsWriteFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import type { AnswerProvider, AnswerRequest } from '@shared/providers'
-import { SYSTEM_PROMPT } from './prompt'
-import { buildClaudeCodeArgs, childEnvironment, parseStreamLine, renderPrompt, type StreamLine } from './claude-code-protocol'
+import { systemPromptFor } from './prompt'
+import {
+  buildClaudeCodeArgs,
+  childEnvironment,
+  parseStreamLine,
+  renderPrompt,
+  renderUserMessage,
+  type StreamLine,
+} from './claude-code-protocol'
 
 /** The slice of a child process this provider uses, so tests can supply a fake. */
 export interface ChildLike {
@@ -24,51 +27,98 @@ export interface ClaudeCodeOptions {
   command?: string
   model: string
   spawn?: SpawnLike
-  tempDir?: string
-  writeFile?: (path: string, data: Uint8Array) => Promise<void>
-  removeFile?: (path: string) => Promise<void>
 }
 
 type QueueEvent = StreamLine | { type: 'closed'; code: number | null }
 
+interface Session {
+  child: ChildLike
+  /** The profile the process was started with; a change needs a new system prompt, so a new process. */
+  profile: string | null
+  /** Last transcript entry the model has already seen, so later turns send only what is new. */
+  lastSentId: string | null
+  events: QueueEvent[]
+  wake: (() => void) | null
+  stderr: string
+  closed: boolean
+}
+
 const ERROR_SNIPPET_CHARS = 300
 const describe = (error: unknown): string => (error instanceof Error ? error.message : String(error))
-const defaultSpawn: SpawnLike = (command, args) =>
-  nodeSpawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: childEnvironment(process.env) })
+const defaultSpawn: SpawnLike = (command, args) => {
+  const child = nodeSpawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: childEnvironment(process.env) })
+  // A write after the CLI died must not take the main process down with it; the close handler reports it.
+  child.stdin.on('error', () => undefined)
+  return child
+}
 
 /**
  * Streams answers through the Claude Code CLI, so the user's Claude login is used instead of an API key.
- * Each ask is one `claude -p` process fed the prompt on stdin.
+ * One `claude -p` process is kept alive for the whole session and fed each question as a stream-json
+ * user message, which saves the multi-second start-up per answer and lets later turns send only the
+ * transcript lines the model has not seen yet.
  */
 export class ClaudeCodeProvider implements AnswerProvider {
+  private session: Session | null = null
+
   constructor(private readonly options: ClaudeCodeOptions) {}
 
   async *stream(request: AnswerRequest, signal?: AbortSignal): AsyncIterable<string> {
-    const { options } = this
-    const writeFile = options.writeFile ?? ((path, data) => fsWriteFile(path, data))
-    let screenshotPath: string | undefined
-    if (request.screenshot) {
-      const extension = request.screenshot.contentType === 'image/jpeg' ? 'jpg' : 'png'
-      screenshotPath = join(options.tempDir ?? tmpdir(), `copilot-${randomUUID()}.${extension}`)
-      await writeFile(screenshotPath, Buffer.from(request.screenshot.dataBase64, 'base64'))
+    const session = this.ensureSession(request.profile ?? null)
+    // Anything left from an earlier turn (a late result after an error) must not be read as this answer.
+    session.events.length = 0
+
+    const text = renderPrompt(request, { afterId: session.lastSentId })
+    session.lastSentId = lastFinishedId(request) ?? session.lastSentId
+    const onAbort = () => this.dropSession(session)
+    signal?.addEventListener('abort', onAbort, { once: true })
+
+    try {
+      session.child.stdin.write(renderUserMessage({ text, screenshot: request.screenshot }))
+      while (true) {
+        while (session.events.length === 0) await new Promise<void>((resolve) => (session.wake = resolve))
+        const event = session.events.shift()!
+        if (event.type === 'text') yield event.text
+        else if (event.type === 'done') return
+        else if (event.type === 'error') throw new Error(`Claude Code failed: ${event.message}`)
+        else {
+          if (signal?.aborted) return
+          if (event.code !== 0) {
+            throw new Error(`Claude Code exited with exit code ${event.code}: ${session.stderr.trim().slice(0, ERROR_SNIPPET_CHARS)}`)
+          }
+          throw new Error('Claude Code exited before answering')
+        }
+      }
+    } finally {
+      signal?.removeEventListener('abort', onAbort)
     }
+  }
 
-    const spawnImpl = options.spawn ?? defaultSpawn
+  /** Ends the CLI process; the next ask starts a fresh one. */
+  async dispose(): Promise<void> {
+    if (this.session) this.dropSession(this.session)
+  }
+
+  private ensureSession(profile: string | null): Session {
+    const current = this.session
+    if (current && !current.closed && current.profile === profile) return current
+    if (current) this.dropSession(current)
+    return this.spawnSession(profile)
+  }
+
+  private spawnSession(profile: string | null): Session {
+    const spawnImpl = this.options.spawn ?? defaultSpawn
     const child = spawnImpl(
-      options.command ?? 'claude',
-      buildClaudeCodeArgs({ model: options.model, system: SYSTEM_PROMPT, allowRead: screenshotPath !== undefined }),
+      this.options.command ?? 'claude',
+      buildClaudeCodeArgs({ model: this.options.model, system: systemPromptFor(profile) }),
     )
-
-    const events: QueueEvent[] = []
-    let wake: (() => void) | null = null
+    const session: Session = { child, profile, lastSentId: null, events: [], wake: null, stderr: '', closed: false }
     const push = (event: QueueEvent) => {
-      events.push(event)
-      wake?.()
-      wake = null
+      session.events.push(event)
+      session.wake?.()
+      session.wake = null
     }
     let partial = ''
-    let stderr = ''
-    let closed = false
     child.stdout.on('data', (chunk: Buffer | string) => {
       partial += chunk.toString()
       let newline = partial.indexOf('\n')
@@ -80,40 +130,37 @@ export class ClaudeCodeProvider implements AnswerProvider {
       }
     })
     child.stderr.on('data', (chunk: Buffer | string) => {
-      stderr += chunk.toString()
+      session.stderr += chunk.toString()
     })
     child.on('close', (code) => {
-      closed = true
+      session.closed = true
+      if (this.session === session) this.session = null
       const tail = partial ? parseStreamLine(partial) : null
       if (tail) push(tail)
       push({ type: 'closed', code })
     })
-    child.on('error', (error) => push({ type: 'error', message: describe(error) }))
-    const onAbort = () => child.kill()
-    signal?.addEventListener('abort', onAbort, { once: true })
+    child.on('error', (error) => {
+      session.closed = true
+      if (this.session === session) this.session = null
+      push({ type: 'error', message: describe(error) })
+    })
+    this.session = session
+    return session
+  }
 
-    child.stdin.write(renderPrompt(request, screenshotPath))
-    child.stdin.end()
-
-    try {
-      while (true) {
-        while (events.length === 0) await new Promise<void>((resolve) => (wake = resolve))
-        const event = events.shift()!
-        if (event.type === 'text') yield event.text
-        else if (event.type === 'done') return
-        else if (event.type === 'error') throw new Error(`Claude Code failed: ${event.message}`)
-        else {
-          if (signal?.aborted) return
-          if (event.code !== 0) {
-            throw new Error(`Claude Code exited with exit code ${event.code}: ${stderr.trim().slice(0, ERROR_SNIPPET_CHARS)}`)
-          }
-          return
-        }
-      }
-    } finally {
-      signal?.removeEventListener('abort', onAbort)
-      if (!closed) child.kill()
-      if (screenshotPath) await (this.options.removeFile ?? unlink)(screenshotPath).catch(() => undefined)
+  private dropSession(session: Session): void {
+    if (this.session === session) this.session = null
+    if (!session.closed) {
+      session.closed = true
+      session.child.kill()
     }
   }
+}
+
+const lastFinishedId = (request: AnswerRequest): string | null => {
+  for (let i = request.transcript.length - 1; i >= 0; i--) {
+    const entry = request.transcript[i]!
+    if (entry.status === 'done' && entry.text.trim()) return entry.id
+  }
+  return null
 }

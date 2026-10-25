@@ -57,6 +57,9 @@ export interface InvokeMap {
   [IPC.transcriptApply]: { request: TranscriptOp; response: AppState }
   [IPC.ask]: { request: AskRequest; response: void }
   [IPC.cancelAsk]: { request: CancelRequest; response: void }
+  /** Opens a file picker for a resume; resolves to an error message, or null when the profile changed or the user cancelled. */
+  [IPC.profilePick]: { request: undefined; response: string | null }
+  [IPC.profileClear]: { request: undefined; response: void }
 }
 
 export interface SendMap {
