@@ -55,13 +55,32 @@ describe('createAutoAnswerScheduler', () => {
     expect(trigger).toHaveBeenCalledTimes(1)
   })
 
-  it('cancels when the user starts answering themselves or when disabled', () => {
+  it('fires at once when the user starts answering before the delay has passed', () => {
     const trigger = vi.fn()
     const scheduler = createAutoAnswerScheduler({ trigger })
     scheduler.onInterviewerLine('Why this role?')
     scheduler.onUserActivity(true)
+    expect(trigger).toHaveBeenCalledTimes(1)
     vi.advanceTimersByTime(AUTO_ANSWER_DELAY_MS * 2)
+    expect(trigger).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores user activity while the interviewer is still talking (speaker echo)', () => {
+    const trigger = vi.fn()
+    const scheduler = createAutoAnswerScheduler({ trigger })
+    scheduler.onInterviewerLine('Why this role?')
+    scheduler.onInterviewerActivity(true)
+    scheduler.onUserActivity(true)
     expect(trigger).not.toHaveBeenCalled()
+    scheduler.onUserActivity(false)
+    scheduler.onInterviewerActivity(false)
+    vi.advanceTimersByTime(AUTO_ANSWER_DELAY_MS)
+    expect(trigger).toHaveBeenCalledTimes(1)
+  })
+
+  it('cancel drops a pending question', () => {
+    const trigger = vi.fn()
+    const scheduler = createAutoAnswerScheduler({ trigger })
     scheduler.onInterviewerLine('And why now?')
     scheduler.cancel()
     vi.advanceTimersByTime(AUTO_ANSWER_DELAY_MS * 2)
