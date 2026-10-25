@@ -419,6 +419,11 @@ button:focus-visible {
 .empty .btn.accent {
   height: 30px;
   padding: 0 16px;
+  /* The long drop shadows smear over the translucent panel; keep only the ring and highlights. */
+  box-shadow:
+    0 0 0 0.5px var(--accent-ring),
+    inset 0 -1px var(--accent-b),
+    inset 0 0.5px var(--accent-hi);
 }
 
 .composer {

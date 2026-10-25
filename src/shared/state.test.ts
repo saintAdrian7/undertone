@@ -29,6 +29,14 @@ describe('RendererPatchSchema', () => {
     expect(() => RendererPatchSchema.parse({ isAnswering: true })).toThrow()
   })
 
+  it('lets the renderer pick the accent, microphone and login item', () => {
+    expect(defaultState().accent).toBe('ember')
+    expect(defaultState().micDeviceId).toBeNull()
+    expect(defaultState().openAtLogin).toBe(false)
+    expect(RendererPatchSchema.parse({ accent: 'violet', micDeviceId: 'abc', openAtLogin: true })).toEqual({ accent: 'violet', micDeviceId: 'abc', openAtLogin: true })
+    expect(() => RendererPatchSchema.parse({ accent: 'pink' })).toThrow()
+  })
+
   it('caps the chat height', () => {
     expect(() => RendererPatchSchema.parse({ chatExpandedHeight: MAX_CHAT_HEIGHT + 1 })).toThrow()
   })

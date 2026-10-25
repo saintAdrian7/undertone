@@ -74,6 +74,21 @@ describe('App', () => {
     )
   })
 
+  it('applies the chosen accent to the document', async () => {
+    ipc.respond(IPC.getState, () => ({ ...defaultState(), accent: 'violet' }))
+    render(<App />)
+    await waitFor(() => expect(document.documentElement.dataset.accent).toBe('violet'))
+  })
+
+  it('renders the settings screen on the /settings route', async () => {
+    window.location.hash = '#/settings'
+    ipc.respond(IPC.appInfo, () => ({ name: 'Undertone', version: '0.1.0', repository: 'https://github.com/x/y' }))
+    ipc.respond(IPC.llmGet, () => null)
+    ipc.respond(IPC.profileGet, () => null)
+    render(<App />)
+    expect(await screen.findByRole('heading', { name: /general/i })).toBeTruthy()
+  })
+
   it('shows audio pipeline errors in the chat window', async () => {
     window.location.hash = '#/chat'
     audioError.value = 'Microphone permission denied'
