@@ -2,7 +2,7 @@
 
 A local-only desktop copilot for live conversations. It floats a small capture-proof overlay over your screen, listens to both sides of a call, keeps a running transcript, and streams answers from Claude into the panel when you ask.
 
-Audio capture, voice detection and transcription run on your machine. Two things leave it: when you ask a question, the recent transcript and (if the **Screen** toggle is on) a screenshot of your display are sent to Anthropic with your own API key; and the Whisper model is downloaded from Hugging Face the first time it is used. Nothing else is fetched at runtime; the voice-activity model and ONNX runtime are bundled from `node_modules`.
+Audio capture, voice detection and transcription run on your machine. Two things leave it: when an answer is generated, the recent transcript, your uploaded resume (if any) and (if the **Screen** toggle is on) a screenshot of your display are sent to the model you configured; and the Whisper model is downloaded from Hugging Face the first time it is used. Nothing else is fetched at runtime; the voice-activity model and ONNX runtime are bundled from `node_modules`.
 
 ## Setup
 
@@ -19,7 +19,7 @@ Pick a model in `.env`. Claude is the default when its key is set:
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-If you have Claude Code installed and signed in, the app can answer through it with no API key at all. This uses your Claude subscription; `LLM_MODEL` takes the CLI's model names such as `sonnet` or `opus`:
+If you have Claude Code installed and signed in, the app can answer through it with no API key at all. This uses your Claude subscription; `LLM_MODEL` takes the CLI's model names such as `haiku` (fastest), `sonnet` or `opus`. The app keeps one CLI process open for the whole session (started when the app launches and whenever you press **Start**), sends each question with only the transcript lines the model has not seen yet, and passes screenshots inline, so answers after the first typically begin within a second or two:
 
 ```
 LLM_PROVIDER=claude-code
@@ -66,7 +66,9 @@ npm run dist
 |---|---|
 | Start / stop listening | Click **Start** on the bar, or `Ctrl+Shift+\` |
 | Show / hide the answer panel | Click **Ask** on the bar |
-| Ask for an answer | Type in the panel and press Enter, or press `Ctrl+Enter` anywhere for "What should I say next?" |
+| Get answers automatically | **Auto on** (the default) on the bar: when the interviewer asks something and goes quiet for about a second, the answer starts on its own. If you start talking first, it stays quiet. **Auto off** leaves it to you. |
+| Ask for an answer yourself | Type in the panel and press Enter, or press `Ctrl+Enter` anywhere for "What should I say next?" |
+| Make answers sound like you | Click **Upload resume** at the top of the panel and pick a `.txt`, `.md` or `.pdf`. The text is kept in the app's user-data folder and sent with every question so answers draw on your real experience; **Remove** forgets it. |
 | Hide from screen share | Click **Shown/Hidden** on the bar, or `Ctrl+\` |
 | Move the bar | Drag it, or `Ctrl+Arrow keys`. Double-click to reset. |
 | Scroll the transcript | `Ctrl+Shift+Up/Down` |
@@ -99,7 +101,7 @@ Ctrl+Enter / Enter ─ screenshot (overlay hidden) ─ Claude API (main process)
 |---|---|---|
 | `ANTHROPIC_API_KEY` | | Selects Claude |
 | `ANTHROPIC_MODEL` | `claude-sonnet-5-5` | Claude model |
-| `LLM_PROVIDER` | | `openai`, `ollama` or `anthropic` |
+| `LLM_PROVIDER` | | `claude-code`, `openai`, `ollama` or `anthropic` |
 | `LLM_BASE_URL` | OpenAI or Ollama default | `/v1` base of an OpenAI-compatible server |
 | `LLM_API_KEY` | | Key for that server (Ollama needs none) |
 | `LLM_MODEL` | | Model name on that server |

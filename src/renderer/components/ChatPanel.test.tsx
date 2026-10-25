@@ -89,4 +89,18 @@ describe('ChatPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /clear/i }))
     expect(props.onClear).toHaveBeenCalledTimes(1)
   })
+
+  it('offers a resume upload, then shows the uploaded name with replace and remove', () => {
+    const onPickProfile = vi.fn()
+    const onClearProfile = vi.fn()
+    const base: ChatPanelProps = { transcript: [], answer: '', status: 'idle', error: null, onAsk: vi.fn(), onClear: vi.fn(), onPickProfile, onClearProfile }
+    const { rerender } = render(<ChatPanel {...base} />)
+    fireEvent.click(screen.getByRole('button', { name: /upload resume/i }))
+    expect(onPickProfile).toHaveBeenCalledTimes(1)
+    rerender(<ChatPanel {...base} profileName="cv.pdf" profileError="Use a .txt, .md or .pdf file" />)
+    expect(screen.getByText(/cv\.pdf/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /remove resume/i }))
+    expect(onClearProfile).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('alert').textContent).toContain('.pdf file')
+  })
 })

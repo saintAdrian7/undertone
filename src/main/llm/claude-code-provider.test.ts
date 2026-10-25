@@ -128,6 +128,20 @@ describe('ClaudeCodeProvider', () => {
     expect(spawn).toHaveBeenCalledTimes(2)
   })
 
+  it('warm starts the process early so the first ask reuses it, and restarts it when the profile changes', async () => {
+    const { provider, spawn, children } = setup(reply('ok'))
+    provider.warm('CV text')
+    expect(spawn).toHaveBeenCalledTimes(1)
+    expect(spawn.mock.calls[0]![1].join(' ')).toContain('CV text')
+    expect(await collect(provider.stream({ question: 'q', transcript: [], profile: 'CV text' }))).toEqual(['ok'])
+    expect(spawn).toHaveBeenCalledTimes(1)
+    provider.warm('New CV')
+    expect(children[0]!.kill).toHaveBeenCalled()
+    expect(spawn).toHaveBeenCalledTimes(2)
+    provider.warm('New CV')
+    expect(spawn).toHaveBeenCalledTimes(2)
+  })
+
   it('dispose kills a live process', async () => {
     const { provider, children } = setup(reply('ok'))
     await collect(provider.stream({ question: 'q', transcript: [] }))
