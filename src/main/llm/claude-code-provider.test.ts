@@ -1,50 +1,50 @@
 import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
+import type { TranscriptEntry } from '@shared/state'
 import { ClaudeCodeProvider, type ChildLike, type SpawnLike } from './claude-code-provider'
 
 const delta = (text: string) =>
   JSON.stringify({ type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text } } }) + '\n'
 const done = JSON.stringify({ type: 'result', subtype: 'success', is_error: false }) + '\n'
+const entry = (id: string, role: 'me' | 'them', text: string): TranscriptEntry => ({
+  id,
+  role,
+  createdAt: '2026-10-19T10:00:00.000Z',
+  relativeMs: 0,
+  status: 'done',
+  text,
+})
 
 class FakeChild extends EventEmitter implements ChildLike {
   stdout = new PassThrough()
   stderr = new PassThrough()
-  stdinText = ''
+  lines: string[] = []
   stdin = {
     write: (text: string) => {
-      this.stdinText += text
+      this.lines.push(text)
+      this.onLine?.(text)
     },
     end: () => undefined,
   }
+  onLine: ((line: string) => void) | null = null
   kill = vi.fn(() => {
     this.emit('close', null)
     return true
   })
 }
 
-function setup(script: (child: FakeChild) => void) {
+/** Each spawned child answers every user line with the given script. */
+function setup(answer: (child: FakeChild, line: string) => void) {
   const children: FakeChild[] = []
-  const spawn = vi.fn<SpawnLike>((_command, _args) => {
+  const spawn = vi.fn<SpawnLike>(() => {
     const child = new FakeChild()
+    child.onLine = (line) => setTimeout(() => answer(child, line), 0)
     children.push(child)
-    setTimeout(() => script(child), 0)
     return child
   })
-  const files: Record<string, Uint8Array> = {}
-  const provider = new ClaudeCodeProvider({
-    command: 'claude',
-    model: 'sonnet',
-    spawn,
-    tempDir: 'C:\\tmp',
-    writeFile: vi.fn(async (path: string, data: Uint8Array) => {
-      files[path] = data
-    }),
-    removeFile: vi.fn(async (path: string) => {
-      delete files[path]
-    }),
-  })
-  return { provider, spawn, children, files }
+  const provider = new ClaudeCodeProvider({ command: 'claude', model: 'sonnet', spawn })
+  return { provider, spawn, children }
 }
 
 const collect = async (iter: AsyncIterable<string>) => {
@@ -53,69 +53,85 @@ const collect = async (iter: AsyncIterable<string>) => {
   return out
 }
 
+const reply = (text: string) => (child: FakeChild) => {
+  child.stdout.write(delta(text))
+  child.stdout.write(done)
+}
+
 describe('ClaudeCodeProvider', () => {
-  it('spawns the CLI, pipes the prompt on stdin and yields streamed text', async () => {
-    const { provider, spawn, children } = setup((child) => {
-      child.stdout.write(delta('Hel'))
-      child.stdout.write(delta('lo'))
-      child.stdout.write(done)
-      child.stdout.end()
-      child.emit('close', 0)
-    })
-    const parts = await collect(provider.stream({ question: 'What next?', transcript: [] }))
-    expect(parts).toEqual(['Hel', 'lo'])
-    expect(spawn).toHaveBeenCalledWith('claude', expect.arrayContaining(['-p', '--model', 'sonnet']))
-    expect(children[0]?.stdinText).toContain('What next?')
+  it('keeps one CLI process across asks and sends each question as a stream-json user line', async () => {
+    const { provider, spawn, children } = setup(reply('ok'))
+    expect(await collect(provider.stream({ question: 'first', transcript: [] }))).toEqual(['ok'])
+    expect(await collect(provider.stream({ question: 'second', transcript: [] }))).toEqual(['ok'])
+    expect(spawn).toHaveBeenCalledTimes(1)
+    expect(spawn).toHaveBeenCalledWith('claude', expect.arrayContaining(['-p', '--input-format', 'stream-json', '--model', 'sonnet']))
+    const lines = children[0]!.lines.map((l) => JSON.parse(l))
+    expect(lines).toHaveLength(2)
+    expect(lines[0].message.content[0].text).toContain('first')
+    expect(lines[1].message.content[0].text).toContain('second')
   })
 
-  it('saves the screenshot to a temp file, allows Read, mentions the path and cleans up', async () => {
-    const { provider, spawn, children, files } = setup((child) => {
-      child.stdout.write(done)
-      child.stdout.end()
-      child.emit('close', 0)
-    })
-    const removed: string[] = []
-    const prov = provider as unknown as { options: { removeFile: (p: string) => Promise<void> } }
-    const original = prov.options.removeFile
-    prov.options.removeFile = async (p) => {
-      removed.push(p)
-      await original(p)
-    }
+  it('sends only transcript lines the session has not seen yet', async () => {
+    const { provider, children } = setup(reply('ok'))
+    await collect(provider.stream({ question: 'q1', transcript: [entry('a', 'them', 'Why this role?')] }))
+    await collect(provider.stream({ question: 'q2', transcript: [entry('a', 'them', 'Why this role?'), entry('b', 'them', 'Tell me more.')] }))
+    const second = JSON.parse(children[0]!.lines[1]!).message.content[0].text as string
+    expect(second).toContain('Tell me more.')
+    expect(second).not.toContain('Why this role?')
+  })
+
+  it('inlines the screenshot as an image block', async () => {
+    const { provider, children } = setup(reply('ok'))
     await collect(provider.stream({ question: 'q', transcript: [], screenshot: { dataBase64: 'QUJD', contentType: 'image/png' } }))
-    const args = spawn.mock.calls[0]?.[1] ?? []
-    expect(args.slice(args.indexOf('--tools'), args.indexOf('--tools') + 2)).toEqual(['--tools', 'Read'])
-    expect(removed).toHaveLength(1)
-    expect(removed[0]).toMatch(/^C:\\tmp\\.*\.png$/)
-    expect(children[0]?.stdinText).toContain(removed[0])
-    expect(Object.keys(files)).toHaveLength(0)
+    const content = JSON.parse(children[0]!.lines[0]!).message.content
+    expect(content[1]).toEqual({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'QUJD' } })
   })
 
-  it('surfaces an error result from the CLI', async () => {
-    const { provider } = setup((child) => {
-      child.stdout.write(JSON.stringify({ type: 'result', subtype: 'error', is_error: true, result: 'not logged in' }) + '\n')
-      child.stdout.end()
-      child.emit('close', 1)
+  it('surfaces an error result and keeps the session for the next ask', async () => {
+    let calls = 0
+    const { provider, spawn } = setup((child) => {
+      calls++
+      if (calls === 1) child.stdout.write(JSON.stringify({ type: 'result', subtype: 'success', is_error: true, result: 'not logged in' }) + '\n')
+      else reply('fine')(child)
     })
     await expect(collect(provider.stream({ question: 'q', transcript: [] }))).rejects.toThrow(/not logged in/)
+    expect(await collect(provider.stream({ question: 'q', transcript: [] }))).toEqual(['fine'])
+    expect(spawn).toHaveBeenCalledTimes(1)
   })
 
-  it('reports a crash with the stderr output when no result arrives', async () => {
-    const { provider } = setup((child) => {
-      child.stderr.write('claude: command failed badly')
-      child.stdout.end()
-      child.emit('close', 2)
+  it('reports a crash with stderr and respawns on the next ask with the full transcript', async () => {
+    let calls = 0
+    const { provider, spawn, children } = setup((child) => {
+      calls++
+      if (calls === 1) {
+        child.stderr.write('boom')
+        child.emit('close', 2)
+      } else reply('back')(child)
     })
-    await expect(collect(provider.stream({ question: 'q', transcript: [] }))).rejects.toThrow(/exit code 2.*command failed badly/)
+    await expect(collect(provider.stream({ question: 'q', transcript: [entry('a', 'them', 'Hi')] }))).rejects.toThrow(/exit code 2.*boom/)
+    expect(await collect(provider.stream({ question: 'q', transcript: [entry('a', 'them', 'Hi')] }))).toEqual(['back'])
+    expect(spawn).toHaveBeenCalledTimes(2)
+    expect(JSON.parse(children[1]!.lines[0]!).message.content[0].text).toContain('Hi')
   })
 
-  it('kills the CLI when the request is aborted', async () => {
+  it('kills the process when aborted and respawns later', async () => {
     const controller = new AbortController()
-    const { provider, children } = setup((child) => {
-      child.stdout.write(delta('a'))
-      setTimeout(() => controller.abort(), 0)
+    const { provider, spawn, children } = setup((child, line) => {
+      if (JSON.parse(line).message.content[0].text.includes('slow')) {
+        child.stdout.write(delta('a'))
+        setTimeout(() => controller.abort(), 0)
+      } else reply('ok')(child)
     })
-    const parts = await collect(provider.stream({ question: 'q', transcript: [] }, controller.signal))
-    expect(parts).toEqual(['a'])
-    expect(children[0]?.kill).toHaveBeenCalled()
+    expect(await collect(provider.stream({ question: 'slow', transcript: [] }, controller.signal))).toEqual(['a'])
+    expect(children[0]!.kill).toHaveBeenCalled()
+    expect(await collect(provider.stream({ question: 'next', transcript: [] }))).toEqual(['ok'])
+    expect(spawn).toHaveBeenCalledTimes(2)
+  })
+
+  it('dispose kills a live process', async () => {
+    const { provider, children } = setup(reply('ok'))
+    await collect(provider.stream({ question: 'q', transcript: [] }))
+    await provider.dispose()
+    expect(children[0]!.kill).toHaveBeenCalled()
   })
 })
