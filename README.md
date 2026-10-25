@@ -19,6 +19,13 @@ Pick a model in `.env`. Claude is the default when its key is set:
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
+If you have Claude Code installed and signed in, the app can answer through it with no API key at all. This uses your Claude subscription; `LLM_MODEL` takes the CLI's model names such as `sonnet` or `opus`:
+
+```
+LLM_PROVIDER=claude-code
+LLM_MODEL=sonnet
+```
+
 Any OpenAI-compatible server works too, which is the easy way to test with free or local models:
 
 ```
