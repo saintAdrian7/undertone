@@ -122,6 +122,57 @@ describe('startListening', () => {
     expect(options.onError).toHaveBeenCalledWith(expect.stringContaining('model offline'))
   })
 
+  it('transcribes one segment at a time, in order, so passes never contend for the model', async () => {
+    const gates: Array<(value: { text: string }) => void> = []
+    const transcribe = vi.fn(() => new Promise<{ text: string }>((resolve) => gates.push(resolve)))
+    const { options, transcript } = setup(transcribe)
+    await startListening(options)
+    const them = callbacks(vad.instances[1]!)
+    them.onSpeechStart()
+    them.onSpeechEnd(new Float32Array(10))
+    them.onSpeechStart()
+    them.onSpeechEnd(new Float32Array(10))
+    await flush()
+    expect(transcribe).toHaveBeenCalledTimes(1)
+    gates[0]!({ text: 'first' })
+    await flush()
+    expect(transcribe).toHaveBeenCalledTimes(2)
+    gates[1]!({ text: 'second' })
+    await flush()
+    expect(transcript().map((entry) => entry.text)).toEqual(['first', 'second'])
+  })
+
+  it('tells the user when transcription is falling behind, and clears the notice when it catches up', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const gates: Array<(value: { text: string }) => void> = []
+      const transcribe = vi.fn(() => new Promise<{ text: string }>((resolve) => gates.push(resolve)))
+      const { options } = setup(transcribe)
+      options.onNotice = vi.fn()
+      await startListening(options)
+      const them = callbacks(vad.instances[1]!)
+      them.onSpeechStart()
+      them.onSpeechEnd(new Float32Array(10))
+      them.onSpeechStart()
+      them.onSpeechEnd(new Float32Array(10))
+      await flush()
+      vi.advanceTimersByTime(31_000)
+      gates[0]!({ text: 'first' })
+      await flush()
+      expect(options.onNotice).toHaveBeenCalledWith(expect.stringMatching(/falling behind/i))
+      gates[1]!({ text: 'second' })
+      await flush()
+      them.onSpeechStart()
+      them.onSpeechEnd(new Float32Array(10))
+      await flush()
+      gates[2]!({ text: 'third' })
+      await flush()
+      expect(options.onNotice).toHaveBeenLastCalledWith(null)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('clears activity on a misfire', async () => {
     const { options } = setup()
     await startListening(options)
