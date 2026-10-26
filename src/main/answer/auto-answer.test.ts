@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createAutoAnswerScheduler, looksLikeQuestion, AUTO_ANSWER_DELAY_MS } from './auto-answer'
+import type { JudgeInput } from './judge'
 
 describe('looksLikeQuestion', () => {
   it('accepts direct questions and interview prompts', () => {
@@ -92,7 +93,7 @@ describe('createAutoAnswerScheduler', () => {
 
     it('asks the judge as soon as the interviewer is quiet and answers at commit when it says answer', async () => {
       const trigger = vi.fn()
-      const judge = vi.fn(async () => verdict())
+      const judge = vi.fn(async (_input: JudgeInput) => verdict())
       const scheduler = createAutoAnswerScheduler({ trigger, judge, getContext: () => context })
       scheduler.onInterviewerLine('Tell me about yourself')
       expect(judge).toHaveBeenCalledTimes(1)
@@ -153,7 +154,7 @@ describe('createAutoAnswerScheduler', () => {
 
     it('does not fire for acknowledgements without even asking the judge', async () => {
       const trigger = vi.fn()
-      const judge = vi.fn(async () => verdict())
+      const judge = vi.fn(async (_input: JudgeInput) => verdict())
       const scheduler = createAutoAnswerScheduler({ trigger, judge, getContext: () => context })
       scheduler.onInterviewerLine('Okay, makes sense.')
       await vi.advanceTimersByTimeAsync(AUTO_ANSWER_DELAY_MS)

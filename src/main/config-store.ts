@@ -29,10 +29,13 @@ export interface KeyCipher {
   decrypt(data: Buffer): string
 }
 
-export async function loadLlmSettings(dir: string, cipher?: KeyCipher): Promise<LlmSettings | null> {
+/** The optional second model for quick decisions (the auto-answer judge). */
+export const BACKGROUND_SETTINGS_FILE = 'llm-background.json'
+
+export async function loadLlmSettings(dir: string, cipher?: KeyCipher, file: string = LLM_SETTINGS_FILE): Promise<LlmSettings | null> {
   let stored: z.infer<typeof StoredSchema>
   try {
-    stored = StoredSchema.parse(JSON.parse(await readFile(join(dir, LLM_SETTINGS_FILE), 'utf8')))
+    stored = StoredSchema.parse(JSON.parse(await readFile(join(dir, file), 'utf8')))
   } catch {
     return null
   }
@@ -47,12 +50,12 @@ export async function loadLlmSettings(dir: string, cipher?: KeyCipher): Promise<
   }
   const settings: LlmSettings = { provider: stored.provider, model: stored.model, baseUrl: stored.baseUrl, apiKey }
   // A plain-text key written by an older version is re-saved encrypted as soon as that is possible.
-  if (stored.apiKey && cipher?.available()) await saveLlmSettings(dir, settings, cipher)
+  if (stored.apiKey && cipher?.available()) await saveLlmSettings(dir, settings, cipher, file)
   return settings
 }
 
-export async function saveLlmSettings(dir: string, settings: LlmSettings | null, cipher?: KeyCipher): Promise<void> {
-  const path = join(dir, LLM_SETTINGS_FILE)
+export async function saveLlmSettings(dir: string, settings: LlmSettings | null, cipher?: KeyCipher, file: string = LLM_SETTINGS_FILE): Promise<void> {
+  const path = join(dir, file)
   if (!settings) {
     await unlink(path).catch(() => undefined)
     return

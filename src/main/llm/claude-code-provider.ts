@@ -33,14 +33,20 @@ export interface ClaudeCodeOptions {
   model: string
   spawn?: SpawnLike
   cwd?: string
+  /** A fixed system prompt (for the judge); otherwise the coaching prompt with the user's profile. */
+  system?: string
+  /** Start a fresh process after this many answered turns, so a long session's context cannot grow without bound. */
+  maxTurnsPerSession?: number
 }
 
 type QueueEvent = StreamLine | { type: 'closed'; code: number | null }
 
 interface Session {
   child: ChildLike
-  /** The profile the process was started with; a change needs a new system prompt, so a new process. */
-  profile: string | null
+  /** The system prompt the process was started with; a change needs a new process. */
+  system: string
+  /** Answered turns so far, for recycling. */
+  turns: number
   /** Last transcript entry the model has already seen, so later turns send only what is new. */
   lastSentId: string | null
   events: QueueEvent[]
@@ -74,7 +80,7 @@ export class ClaudeCodeProvider implements AnswerProvider {
   constructor(private readonly options: ClaudeCodeOptions) {}
 
   async *stream(request: AnswerRequest, signal?: AbortSignal): AsyncIterable<string> {
-    const session = this.ensureSession(request.profile ?? null)
+    const session = this.ensureSession(this.systemFor(request.profile ?? null))
     // Anything left from an earlier turn (a late result after an error) must not be read as this answer.
     session.events.length = 0
 
@@ -89,8 +95,10 @@ export class ClaudeCodeProvider implements AnswerProvider {
         while (session.events.length === 0) await new Promise<void>((resolve) => (session.wake = resolve))
         const event = session.events.shift()!
         if (event.type === 'text') yield event.text
-        else if (event.type === 'done') return
-        else if (event.type === 'init') {
+        else if (event.type === 'done') {
+          this.countTurn(session)
+          return
+        } else if (event.type === 'init') {
           if (event.tools.length > 0 || event.mcpServers > 0) {
             this.dropSession(session)
             throw new Error(`Claude Code started with tools enabled (${event.tools.join(', ') || 'MCP servers'}); refusing to use it`)
@@ -111,7 +119,7 @@ export class ClaudeCodeProvider implements AnswerProvider {
 
   /** Starts the CLI process now, so the first answer does not pay its multi-second start-up. */
   warm(profile: string | null): void {
-    this.ensureSession(profile)
+    this.ensureSession(this.systemFor(profile))
   }
 
   /** Ends the CLI process; the next ask starts a fresh one. */
@@ -119,21 +127,31 @@ export class ClaudeCodeProvider implements AnswerProvider {
     if (this.session) this.dropSession(this.session)
   }
 
-  private ensureSession(profile: string | null): Session {
-    const current = this.session
-    if (current && !current.closed && current.profile === profile) return current
-    if (current) this.dropSession(current)
-    return this.spawnSession(profile)
+  private systemFor(profile: string | null): string {
+    return this.options.system ?? systemPromptFor(profile)
   }
 
-  private spawnSession(profile: string | null): Session {
+  /** After the configured number of turns the process is replaced by a fresh, already-warm one. */
+  private countTurn(session: Session): void {
+    session.turns += 1
+    const max = this.options.maxTurnsPerSession
+    if (max && session.turns >= max && this.session === session) {
+      this.dropSession(session)
+      this.spawnSession(session.system)
+    }
+  }
+
+  private ensureSession(system: string): Session {
+    const current = this.session
+    if (current && !current.closed && current.system === system) return current
+    if (current) this.dropSession(current)
+    return this.spawnSession(system)
+  }
+
+  private spawnSession(system: string): Session {
     const spawnImpl = this.options.spawn ?? defaultSpawn
-    const child = spawnImpl(
-      this.options.command ?? 'claude',
-      buildClaudeCodeArgs({ model: this.options.model, system: systemPromptFor(profile) }),
-      { cwd: this.options.cwd },
-    )
-    const session: Session = { child, profile, lastSentId: null, events: [], wake: null, stderr: '', closed: false }
+    const child = spawnImpl(this.options.command ?? 'claude', buildClaudeCodeArgs({ model: this.options.model, system }), { cwd: this.options.cwd })
+    const session: Session = { child, system, turns: 0, lastSentId: null, events: [], wake: null, stderr: '', closed: false }
     const push = (event: QueueEvent) => {
       session.events.push(event)
       session.wake?.()

@@ -66,6 +66,10 @@ export interface InvokeMap {
   [IPC.llmGet]: { request: undefined; response: PublicLlmSettings | null }
   /** Resolves to an error message, or null when the model was switched. */
   [IPC.llmSet]: { request: LlmSettingsRequest; response: string | null }
+  /** The separate model for quick decisions (the auto-answer judge), or null when the main one is used. */
+  [IPC.llmBackgroundGet]: { request: undefined; response: PublicLlmSettings | null }
+  /** Null switches back to the main model. Resolves to an error message, or null on success. */
+  [IPC.llmBackgroundSet]: { request: LlmSettingsRequest | null; response: string | null }
   /** Rejects when the accelerator is already taken. */
   [IPC.shortcutsSet]: { request: ShortcutUpdate; response: AppState }
 }

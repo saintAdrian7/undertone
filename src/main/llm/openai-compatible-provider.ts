@@ -10,6 +10,8 @@ export interface OpenAICompatibleOptions {
   model: string
   maxTokens?: number
   fetch?: FetchLike
+  /** A fixed system prompt (for the judge); otherwise the coaching prompt with the user's profile. */
+  system?: string
 }
 
 type OpenAIPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
@@ -46,7 +48,9 @@ export class OpenAICompatibleProvider implements AnswerProvider {
   constructor(private readonly options: OpenAICompatibleOptions) {}
 
   async *stream(request: AnswerRequest, signal?: AbortSignal): AsyncIterable<string> {
-    const { system, messages } = buildMessages(request)
+    const built = buildMessages(request)
+    const { messages } = built
+    const system = this.options.system ?? built.system
     const fetchImpl = this.options.fetch ?? globalThis.fetch
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (this.options.apiKey) headers.Authorization = `Bearer ${this.options.apiKey}`

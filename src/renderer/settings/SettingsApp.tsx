@@ -118,7 +118,56 @@ function ModelPage() {
     }
   }
 
+  const [separate, setSeparate] = useState(false)
+  const [bgProvider, setBgProvider] = useState<ProviderChoice>('claude-code')
+  const [bgModel, setBgModel] = useState('haiku')
+  const [bgBaseUrl, setBgBaseUrl] = useState('')
+  const [bgApiKey, setBgApiKey] = useState('')
+  const [bgMessage, setBgMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    window.ipc.invoke(IPC.llmBackgroundGet, undefined).then((settings) => {
+      if (!settings) return
+      setSeparate(true)
+      setBgProvider(settings.provider === 'openai' && settings.baseUrl === OLLAMA_BASE_URL ? 'ollama' : settings.provider)
+      setBgModel(settings.model)
+      setBgBaseUrl(settings.baseUrl ?? '')
+    })
+  }, [])
+
+  const toggleSeparate = async () => {
+    if (separate) {
+      setSeparate(false)
+      setBgMessage(null)
+      try {
+        setBgMessage(await window.ipc.invoke(IPC.llmBackgroundSet, null))
+      } catch (error) {
+        setBgMessage(describe(error))
+      }
+      return
+    }
+    setSeparate(true)
+  }
+
+  const saveBackground = async () => {
+    const effectiveProvider = bgProvider === 'ollama' ? 'openai' : bgProvider
+    const effectiveBase = bgProvider === 'ollama' ? bgBaseUrl.trim() || OLLAMA_BASE_URL : bgProvider === 'openai' ? bgBaseUrl.trim() || null : null
+    try {
+      const error = await window.ipc.invoke(IPC.llmBackgroundSet, {
+        provider: effectiveProvider,
+        model: bgModel.trim(),
+        baseUrl: effectiveBase,
+        ...(bgApiKey ? { apiKey: bgApiKey } : {}),
+      })
+      setBgMessage(error ?? 'Saved. Quick decisions now use this model.')
+      if (!error) setBgApiKey('')
+    } catch (error) {
+      setBgMessage(describe(error))
+    }
+  }
+
   const needsKey = provider === 'anthropic' || provider === 'openai'
+  const bgNeedsKey = bgProvider === 'anthropic' || bgProvider === 'openai' || bgProvider === 'ollama'
   return (
     <>
       <h2>Model</h2>
@@ -167,6 +216,50 @@ function ModelPage() {
         </button>
         {message && <span className="hint">{message}</span>}
       </div>
+
+      <h2 className="subhead">Quick decisions</h2>
+      <p className="hint">
+        Deciding whether the interviewer just asked you something is a tiny job. A small, fast model does it best; by default the main model is used.
+      </p>
+      <label className="check">
+        <input type="checkbox" aria-label="Use a separate, faster model for quick decisions" checked={separate} onChange={() => void toggleSeparate()} />
+        Use a separate, faster model for quick decisions
+      </label>
+      {separate && (
+        <>
+          <label className="field">
+            <span>Background provider</span>
+            <select aria-label="Background provider" value={bgProvider} onChange={(event) => setBgProvider(event.target.value as ProviderChoice)}>
+              <option value="claude-code">Claude Code CLI (your Claude login)</option>
+              <option value="anthropic">Anthropic API key</option>
+              <option value="openai">OpenAI-compatible server</option>
+              <option value="ollama">Ollama (local)</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>Background model</span>
+            <input type="text" aria-label="Background model" value={bgModel} onChange={(event) => setBgModel(event.target.value)} placeholder={bgProvider === 'claude-code' ? 'haiku' : 'a small, fast model'} />
+          </label>
+          {(bgProvider === 'openai' || bgProvider === 'ollama') && (
+            <label className="field">
+              <span>Background base URL</span>
+              <input type="text" aria-label="Background base URL" value={bgBaseUrl} onChange={(event) => setBgBaseUrl(event.target.value)} placeholder={bgProvider === 'ollama' ? OLLAMA_BASE_URL : 'https://api.openai.com/v1'} />
+            </label>
+          )}
+          {bgNeedsKey && (
+            <label className="field">
+              <span>Background API key{bgProvider === 'ollama' ? ' (optional)' : ''}</span>
+              <input type="password" aria-label="Background API key" value={bgApiKey} onChange={(event) => setBgApiKey(event.target.value)} autoComplete="off" />
+            </label>
+          )}
+          <div className="actions">
+            <button type="button" className="btn accent" onClick={() => void saveBackground()}>
+              Save background model
+            </button>
+          </div>
+        </>
+      )}
+      {bgMessage && <p className="hint">{bgMessage}</p>}
     </>
   )
 }

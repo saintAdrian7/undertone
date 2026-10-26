@@ -59,6 +59,14 @@ describe('OpenAICompatibleProvider', () => {
     expect(user.some((part) => part.type === 'text' && part.text?.includes('what is on screen?'))).toBe(true)
   })
 
+  it('uses a fixed system prompt when one is configured', async () => {
+    const fetch = vi.fn<FetchLike>(async () => new Response(sse(['data: [DONE]\n\n']), { status: 200 }))
+    const provider = new OpenAICompatibleProvider({ fetch, baseUrl: 'https://example.test/v1', apiKey: null, model: 'm', system: 'JUDGE RULES' })
+    await collect(provider.stream({ question: 'hi', transcript: [], profile: 'CV text' }))
+    const body = JSON.parse((fetch.mock.calls[0]![1] as RequestInit).body as string)
+    expect(body.messages[0]).toEqual({ role: 'system', content: 'JUDGE RULES' })
+  })
+
   it('omits the Authorization header when there is no key', async () => {
     const fetch = vi.fn<FetchLike>(async () => new Response(sse(['data: [DONE]\n\n']), { status: 200 }))
     const provider = new OpenAICompatibleProvider({ fetch, baseUrl: 'http://localhost:11434/v1', apiKey: null, model: 'llama3.2' })

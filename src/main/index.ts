@@ -33,7 +33,16 @@ import {
   type PublicLlmSettings,
 } from '@shared/ipc'
 import { APP_NAME, REPOSITORY_URL } from '@shared/brand'
-import { loadLlmSettings, mergeApiKey, publicLlmSettings, resolveConfigWith, saveLlmSettings, type KeyCipher, type LlmSettings } from './config-store'
+import {
+  BACKGROUND_SETTINGS_FILE,
+  loadLlmSettings,
+  mergeApiKey,
+  publicLlmSettings,
+  resolveConfigWith,
+  saveLlmSettings,
+  type KeyCipher,
+  type LlmSettings,
+} from './config-store'
 import { applyShortcutUpdate } from './shortcuts/update'
 import { createTrustedUrlCheck } from './trust'
 import { contentProtectionFor } from './overlay/window-options'
@@ -46,6 +55,7 @@ import type { OverlayKind, OverlayWindowOptions } from './overlay/window-options
 import { createShortcutSyncer } from './shortcuts/syncer'
 import { createAnswerService } from './answer/service'
 import { createAutoAnswerScheduler, newlyFinishedInterviewerLines } from './answer/auto-answer'
+import { createJudge, JUDGE_SYSTEM_PROMPT } from './answer/judge'
 import { extractProfileText, loadProfile, saveProfile, PROFILE_EXTENSIONS, type Profile } from './profile/store'
 import { renderTrayIconPng } from './tray/icon'
 import { trayMenuTemplate } from './tray/menu'
@@ -107,21 +117,38 @@ const keyCipher: KeyCipher = {
   decrypt: (data) => safeStorage.decryptString(data),
 }
 
-function createProvider(llm: LlmConfig | null, cliCwd: string): AnswerProvider | null {
+interface ProviderExtras {
+  /** A fixed system prompt instead of the coaching prompt (the judge). */
+  system?: string
+  maxTurnsPerSession?: number
+}
+
+function createProvider(llm: LlmConfig | null, cliCwd: string, extras: ProviderExtras = {}): AnswerProvider | null {
   if (!llm) return null
   if (llm.provider === 'anthropic') {
     return new ClaudeAnswerProvider({
       // The SDK's stream params are a superset of the shape this provider builds.
       client: new Anthropic({ apiKey: llm.apiKey ?? undefined }) as unknown as MessageStreamClient,
       model: llm.model,
+      system: extras.system,
     })
   }
   if (llm.provider === 'claude-code') {
     // Started in an empty folder of our own, so the CLI picks up no project memory and no lookalike binary from the launch directory.
-    return new ClaudeCodeProvider({ command: process.env.CLAUDE_CODE_COMMAND?.trim() || 'claude', model: llm.model, cwd: cliCwd })
+    return new ClaudeCodeProvider({
+      command: process.env.CLAUDE_CODE_COMMAND?.trim() || 'claude',
+      model: llm.model,
+      cwd: cliCwd,
+      system: extras.system,
+      maxTurnsPerSession: extras.maxTurnsPerSession,
+    })
   }
-  return new OpenAICompatibleProvider({ baseUrl: llm.baseUrl ?? DEFAULT_OPENAI_BASE_URL, apiKey: llm.apiKey, model: llm.model })
+  return new OpenAICompatibleProvider({ baseUrl: llm.baseUrl ?? DEFAULT_OPENAI_BASE_URL, apiKey: llm.apiKey, model: llm.model, system: extras.system })
 }
+
+/** The judge's Claude Code session is recycled after this many verdicts so its context stays small. */
+const JUDGE_TURNS_PER_SESSION = 25
+const judgeExtras: ProviderExtras = { system: JUDGE_SYSTEM_PROMPT, maxTurnsPerSession: JUDGE_TURNS_PER_SESSION }
 
 async function main(): Promise<void> {
   const userData = app.getPath('userData')
@@ -142,6 +169,38 @@ async function main(): Promise<void> {
   const loaded = new Set<OverlayKind>()
 
   let provider = createProvider(config.llm, cliCwd)
+
+  // The judge (is this a question for the user?) runs on the background model when one is set,
+  // otherwise on a second instance of the main model with the judge's own system prompt.
+  let savedBackground = await loadLlmSettings(userData, keyCipher, BACKGROUND_SETTINGS_FILE)
+  const judgeLlmFor = (settings: LlmSettings | null): LlmConfig | null => {
+    if (!settings) return config.llm
+    try {
+      return resolveConfigWith(env, settings).llm
+    } catch (error) {
+      log.warn(`Background model ignored: ${describe(error)}`)
+      return config.llm
+    }
+  }
+  let judgeProvider = createProvider(judgeLlmFor(savedBackground), cliCwd, judgeExtras)
+  const judge = createJudge({ getProvider: () => judgeProvider })
+
+  /** Switches the background model; null means "same as the main model". */
+  async function switchBackground(next: LlmSettings | null): Promise<string | null> {
+    try {
+      const nextProvider = createProvider(next ? resolveConfigWith(env, next).llm : config.llm, cliCwd, judgeExtras)
+      await saveLlmSettings(userData, next, keyCipher, BACKGROUND_SETTINGS_FILE)
+      void judgeProvider?.dispose?.()
+      judgeProvider = nextProvider
+      savedBackground = next
+      judgeProvider?.warm?.(null)
+      log.info(`Background model: ${next ? `${next.provider} ${next.model}` : 'same as main'}`)
+      return null
+    } catch (error) {
+      log.warn(`Background model change failed: ${describe(error)}`)
+      return describe(error)
+    }
+  }
   if (provider) log.info(`Answer model: ${config.llm?.provider} ${config.llm?.model}`)
   else log.warn('No model configured; pick one in Settings, or set ANTHROPIC_API_KEY or LLM_PROVIDER and LLM_MODEL in .env')
 
@@ -160,6 +219,10 @@ async function main(): Promise<void> {
       provider = nextProvider
       savedLlm = next
       config = nextConfig
+      if (!savedBackground) {
+        void judgeProvider?.dispose?.()
+        judgeProvider = createProvider(nextConfig.llm, cliCwd, judgeExtras)
+      }
       log.info(`Answer model: ${next.provider} ${next.model}`)
       warmProvider()
       return null
@@ -281,6 +344,7 @@ async function main(): Promise<void> {
   function warmProvider(): void {
     try {
       provider?.warm?.(profile?.text ?? null)
+      judgeProvider?.warm?.(null)
     } catch (error) {
       log.warn(`Warming the model failed: ${describe(error)}`)
     }
@@ -328,6 +392,7 @@ async function main(): Promise<void> {
   }
 
   // Answers come on their own once the interviewer asks something and stops talking.
+  const JUDGE_CONTEXT_TURNS = 8
   const autoAnswer = createAutoAnswerScheduler({
     trigger: () => {
       const state = store.get()
@@ -335,6 +400,15 @@ async function main(): Promise<void> {
       if (!state.showChat) store.patch({ showChat: true })
       broadcast(IPC.chatSubmit, undefined)
     },
+    judge,
+    getContext: () => ({
+      turns: store
+        .get()
+        .transcript.filter((entry) => entry.status === 'done' && entry.text.trim())
+        .slice(-JUDGE_CONTEXT_TURNS)
+        .map((entry) => ({ role: entry.role, text: entry.text })),
+      userName: null,
+    }),
   })
 
   function toggleListening(): void {
@@ -477,6 +551,16 @@ async function main(): Promise<void> {
       // The stored key is reused only for the same provider and server, so a renderer cannot point it elsewhere.
       return switchLlm({ provider: parsed.provider, model: parsed.model, baseUrl: parsed.baseUrl, apiKey: mergeApiKey(savedLlm, parsed) })
     })
+    ipcMain.handle(IPC.llmBackgroundGet, (event) => {
+      guard(event)
+      return savedBackground ? publicLlmSettings(savedBackground, 'settings') : null
+    })
+    ipcMain.handle(IPC.llmBackgroundSet, (event, request: unknown) => {
+      guard(event)
+      if (request === null) return switchBackground(null)
+      const parsed = LlmSettingsRequestSchema.parse(request)
+      return switchBackground({ provider: parsed.provider, model: parsed.model, baseUrl: parsed.baseUrl, apiKey: mergeApiKey(savedBackground, parsed) })
+    })
     ipcMain.handle(IPC.shortcutsSet, (event, request: unknown) => {
       guard(event)
       return store.patch({ shortcuts: applyShortcutUpdate(store.get().shortcuts, ShortcutUpdateSchema.parse(request)) })
@@ -536,6 +620,7 @@ async function main(): Promise<void> {
     shortcuts.dispose()
     autoAnswer.cancel()
     void provider?.dispose?.()
+    void judgeProvider?.dispose?.()
     tray?.destroy()
     tray = null
     manager.dispose()

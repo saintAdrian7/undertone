@@ -15,6 +15,8 @@ const INVOKE_CHANNELS = new Set<string>([
   IPC.appInfo,
   IPC.llmGet,
   IPC.llmSet,
+  IPC.llmBackgroundGet,
+  IPC.llmBackgroundSet,
   IPC.shortcutsSet,
 ])
 const SEND_CHANNELS = new Set<string>([

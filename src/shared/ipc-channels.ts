@@ -16,6 +16,8 @@ export const IPC = {
   appInfo: 'app:info',
   llmGet: 'llm:get',
   llmSet: 'llm:set',
+  llmBackgroundGet: 'llm:background:get',
+  llmBackgroundSet: 'llm:background:set',
   shortcutsSet: 'shortcuts:set',
   // renderer → main (send)
   toggleSession: 'session:toggle',

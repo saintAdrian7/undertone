@@ -878,3 +878,19 @@ button:focus-visible {
 .settings-root a {
   color: var(--accent-hi);
 }
+
+.settings-root .subhead {
+  margin-top: 26px;
+}
+
+.settings-root .check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  cursor: pointer;
+}
+
+.settings-root .check input {
+  accent-color: var(--accent-hi);
+}

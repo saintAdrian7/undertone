@@ -15,6 +15,7 @@ beforeEach(() => {
   ipc.respond(IPC.appInfo, () => ({ name: 'Undertone', version: '0.1.0', repository: 'https://github.com/x/y' }))
   ipc.respond(IPC.llmGet, () => ({ provider: 'claude-code', model: 'sonnet', baseUrl: null, hasApiKey: false, source: 'env' }))
   ipc.respond(IPC.llmSet, () => null)
+  ipc.respond(IPC.llmBackgroundGet, () => null)
   ipc.respond(IPC.profileGet, () => ({ name: 'cv.pdf', text: 'Jane Doe, engineer.' }))
   ipc.respond(IPC.profileClear, () => undefined)
   ipc.respond(IPC.shortcutsSet, () => defaultState())

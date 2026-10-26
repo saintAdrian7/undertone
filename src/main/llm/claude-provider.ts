@@ -19,6 +19,8 @@ export interface ClaudeProviderOptions {
   client: MessageStreamClient
   model: string
   maxTokens?: number
+  /** A fixed system prompt (for the judge); otherwise the coaching prompt with the user's profile. */
+  system?: string
 }
 
 const DEFAULT_MAX_TOKENS = 1024
@@ -40,7 +42,9 @@ export class ClaudeAnswerProvider implements AnswerProvider {
   constructor(private readonly options: ClaudeProviderOptions) {}
 
   async *stream(request: AnswerRequest, signal?: AbortSignal): AsyncIterable<string> {
-    const { system, messages } = buildMessages(request)
+    const built = buildMessages(request)
+    const { messages } = built
+    const system = this.options.system ?? built.system
     let events: AsyncIterable<unknown>
     try {
       events = this.options.client.messages.stream(
