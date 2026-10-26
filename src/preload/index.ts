@@ -11,6 +11,11 @@ const INVOKE_CHANNELS = new Set<string>([
   IPC.cancelAsk,
   IPC.profilePick,
   IPC.profileClear,
+  IPC.profileGet,
+  IPC.appInfo,
+  IPC.llmGet,
+  IPC.llmSet,
+  IPC.shortcutsSet,
 ])
 const SEND_CHANNELS = new Set<string>([
   IPC.toggleSession,

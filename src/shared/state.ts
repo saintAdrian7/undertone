@@ -39,6 +39,8 @@ export type TranscriptEntry = z.infer<typeof TranscriptEntrySchema>
 
 const ScreenUseSchema = z.enum(['off', 'required'])
 const ThemeSchema = z.enum(['system', 'light', 'dark'])
+export const AccentSchema = z.enum(['ember', 'jade', 'violet'])
+export type Accent = z.infer<typeof AccentSchema>
 
 export const AppStateSchema = z.object({
   windowsLoaded: z.boolean().default(false),
@@ -64,6 +66,10 @@ export const AppStateSchema = z.object({
   profileName: z.string().nullable().default(null),
   /** True while an answer is streaming; the pill's Ask label shimmers. Main-owned. */
   isAnswering: z.boolean().default(false),
+  accent: AccentSchema.default('ember'),
+  /** Microphone to listen to; null means the system default. */
+  micDeviceId: z.string().max(200).nullable().default(null),
+  openAtLogin: z.boolean().default(false),
 })
 
 export type AppState = z.infer<typeof AppStateSchema>
@@ -87,6 +93,9 @@ export const RendererPatchSchema = z.strictObject({
   meHasVoiceActivity: z.boolean().optional(),
   themHasVoiceActivity: z.boolean().optional(),
   autoAnswer: z.boolean().optional(),
+  accent: AccentSchema.optional(),
+  micDeviceId: z.string().max(200).nullable().optional(),
+  openAtLogin: z.boolean().optional(),
 })
 
 export type RendererPatch = z.infer<typeof RendererPatchSchema>

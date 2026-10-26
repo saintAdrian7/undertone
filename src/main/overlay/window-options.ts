@@ -1,4 +1,5 @@
 import { MAX_CHAT_HEIGHT, type AppState } from '@shared/state'
+import { APP_NAME } from '@shared/brand'
 import type { Point, Size } from './geometry'
 
 export const CONTROL_SIZE: Size = { width: 320, height: 50 }
@@ -67,6 +68,6 @@ export function overlayWindowOptions(kind: OverlayKind, state: AppState, positio
     fullscreenable: false,
     focusable: isFocusable(state),
     show: false,
-    title: 'Meeting Copilot',
+    title: APP_NAME,
   }
 }

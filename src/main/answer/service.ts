@@ -5,7 +5,9 @@ import type { AppState } from '@shared/state'
 export type EventSender = <C extends keyof EventMap>(channel: C, payload: EventMap[C]) => void
 
 export interface AnswerServiceDeps {
-  provider: AnswerProvider | null
+  provider?: AnswerProvider | null
+  /** Preferred over `provider` when the model can be switched at runtime. */
+  getProvider?(): AnswerProvider | null
   getState(): AppState
   capture(): Promise<Screenshot>
   /** The user's resume or notes, when uploaded. */
@@ -27,7 +29,8 @@ export function createAnswerService(deps: AnswerServiceDeps): AnswerService {
 
   return {
     async ask({ requestId, question }, send) {
-      if (!deps.provider) {
+      const provider = deps.getProvider ? deps.getProvider() : (deps.provider ?? null)
+      if (!provider) {
         send(IPC.answerError, {
           requestId,
           message: 'No model is configured. Set ANTHROPIC_API_KEY, or LLM_PROVIDER and LLM_MODEL, in .env and restart the app.',
@@ -53,7 +56,7 @@ export function createAnswerService(deps: AnswerServiceDeps): AnswerService {
         send(IPC.answerStarted, { requestId, screenshotAttached: screenshot !== undefined })
         // Read the transcript after the capture so the prompt reflects what was said while it ran.
         const request = { question, transcript: deps.getState().transcript, screenshot, profile: deps.getProfile?.() ?? null }
-        for await (const chunk of deps.provider.stream(request, controller.signal)) {
+        for await (const chunk of provider.stream(request, controller.signal)) {
           if (!isCurrent()) break
           send(IPC.answerChunk, { requestId, text: chunk })
         }
