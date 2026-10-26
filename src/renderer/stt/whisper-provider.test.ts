@@ -64,6 +64,36 @@ describe('WhisperProvider', () => {
     expect(run).toHaveBeenCalledWith(samples, expect.objectContaining({ language: 'en' }))
   })
 
+  it('sends no task or language to an English-only checkpoint, which rejects them', async () => {
+    const run: AsrPipeline = vi.fn(async () => ({ text: 'ok' }))
+    const provider = new WhisperProvider({ model: 'onnx-community/whisper-base.en', pipelineFactory: async () => run })
+    await provider.transcribe({ samples, sampleRate: 16000, language: 'en' })
+    const options = (run as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as Record<string, unknown>
+    expect(options).not.toHaveProperty('task')
+    expect(options).not.toHaveProperty('language')
+  })
+
+  it('asks for the chunked pipeline only when the clip is longer than one Whisper window', async () => {
+    const run: AsrPipeline = vi.fn(async () => ({ text: 'ok' }))
+    const provider = new WhisperProvider({ model: 'm', pipelineFactory: async () => run })
+    await provider.transcribe({ samples: new Float32Array(16000 * 20), sampleRate: 16000 })
+    expect((run as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]).not.toHaveProperty('chunk_length_s')
+    await provider.transcribe({ samples: new Float32Array(16000 * 31), sampleRate: 16000 })
+    expect((run as ReturnType<typeof vi.fn>).mock.calls[1]?.[1]).toMatchObject({ chunk_length_s: 30 })
+  })
+
+  it('guards the decoder against repetition loops', async () => {
+    const run: AsrPipeline = vi.fn(async () => ({ text: 'ok' }))
+    const provider = new WhisperProvider({ model: 'm', pipelineFactory: async () => run })
+    await provider.transcribe({ samples, sampleRate: 16000 })
+    expect(run).toHaveBeenCalledWith(samples, expect.objectContaining({ no_repeat_ngram_size: 6 }))
+  })
+
+  it('returns empty text for a hallucinated segment', async () => {
+    const provider = new WhisperProvider({ model: 'm', pipelineFactory: async () => async () => ({ text: ' Thank you for watching. ' }) })
+    expect(await provider.transcribe({ samples, sampleRate: 16000 })).toEqual({ text: '' })
+  })
+
   it('rejects audio that is not 16 kHz', async () => {
     const provider = new WhisperProvider({ model: 'm', pipelineFactory: async () => async () => ({ text: 'x' }) })
     await expect(provider.transcribe({ samples, sampleRate: 48000 })).rejects.toThrow(/16000/)
