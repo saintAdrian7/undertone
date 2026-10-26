@@ -33,7 +33,7 @@ export function createAnswerService(deps: AnswerServiceDeps): AnswerService {
       if (!provider) {
         send(IPC.answerError, {
           requestId,
-          message: 'No model is configured. Set ANTHROPIC_API_KEY, or LLM_PROVIDER and LLM_MODEL, in .env and restart the app.',
+          message: 'No model is configured. Pick one in Settings (click the pill), or set ANTHROPIC_API_KEY or LLM_PROVIDER and LLM_MODEL in .env and restart.',
         })
         return
       }

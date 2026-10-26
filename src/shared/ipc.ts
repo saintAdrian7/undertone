@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { MAX_TRANSCRIPT_TEXT_CHARS, ShortcutsSchema, SpeakerRoleSchema, type AppState, type RendererPatch } from './state'
 import { IPC } from './ipc-channels'
+import { validateBaseUrl } from './base-url'
 
 export { IPC, type IpcChannel } from './ipc-channels'
 
@@ -69,7 +70,12 @@ export interface InvokeMap {
   [IPC.shortcutsSet]: { request: ShortcutUpdate; response: AppState }
 }
 
-export const ControlDragSchema = z.strictObject({ x: z.number().int(), y: z.number().int() })
+/** Window positions; bounded so a bad renderer cannot park the overlay in the far distance. */
+const COORD_LIMIT = 20_000
+export const ControlDragSchema = z.strictObject({
+  x: z.number().int().min(-COORD_LIMIT).max(COORD_LIMIT),
+  y: z.number().int().min(-COORD_LIMIT).max(COORD_LIMIT),
+})
 export type ControlDrag = z.infer<typeof ControlDragSchema>
 
 /** One shortcut change from the Settings window; `null` restores the default. */
@@ -82,10 +88,25 @@ export type ShortcutUpdate = z.infer<typeof ShortcutUpdateSchema>
 export const LlmProviderSchema = z.enum(['anthropic', 'openai', 'claude-code'])
 
 /** Model settings from the Settings window. A missing `apiKey` keeps the stored one. */
+const isValidBaseUrl = (value: string | null): boolean => {
+  if (value === null) return true
+  try {
+    validateBaseUrl(value)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export const LlmSettingsRequestSchema = z.strictObject({
   provider: LlmProviderSchema,
-  model: z.string().min(1).max(200),
-  baseUrl: z.string().max(500).nullable(),
+  /** Model names as the providers spell them; never something that could read as a CLI flag. */
+  model: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:/[\]-]{0,199}$/, 'Model name contains characters that are not allowed'),
+  baseUrl: z
+    .string()
+    .max(500)
+    .nullable()
+    .refine(isValidBaseUrl, { message: 'Base URL must use https (plain http is allowed only for localhost) and carry no credentials, query or fragment' }),
   apiKey: z.string().max(500).optional(),
 })
 export type LlmSettingsRequest = z.infer<typeof LlmSettingsRequestSchema>

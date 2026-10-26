@@ -20,13 +20,19 @@ export interface ChildLike {
   kill(): unknown
 }
 
-export type SpawnLike = (command: string, args: string[]) => ChildLike
+export interface SpawnOptions {
+  /** Working directory for the CLI: an empty folder, so no project memory or lookalike binary is picked up. */
+  cwd?: string
+}
+
+export type SpawnLike = (command: string, args: string[], options: SpawnOptions) => ChildLike
 
 export interface ClaudeCodeOptions {
   /** Executable name or path; `claude` is resolved on PATH. */
   command?: string
   model: string
   spawn?: SpawnLike
+  cwd?: string
 }
 
 type QueueEvent = StreamLine | { type: 'closed'; code: number | null }
@@ -44,9 +50,13 @@ interface Session {
 }
 
 const ERROR_SNIPPET_CHARS = 300
+/** A single output line longer than this is not a stream-json event; the process is misbehaving. */
+const MAX_LINE_CHARS = 1_000_000
+/** Only the tail of stderr is kept for error messages. */
+const MAX_STDERR_CHARS = 4096
 const describe = (error: unknown): string => (error instanceof Error ? error.message : String(error))
-const defaultSpawn: SpawnLike = (command, args) => {
-  const child = nodeSpawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: childEnvironment(process.env) })
+const defaultSpawn: SpawnLike = (command, args, { cwd }) => {
+  const child = nodeSpawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: childEnvironment(process.env), cwd })
   // A write after the CLI died must not take the main process down with it; the close handler reports it.
   child.stdin.on('error', () => undefined)
   return child
@@ -80,7 +90,12 @@ export class ClaudeCodeProvider implements AnswerProvider {
         const event = session.events.shift()!
         if (event.type === 'text') yield event.text
         else if (event.type === 'done') return
-        else if (event.type === 'error') throw new Error(`Claude Code failed: ${event.message}`)
+        else if (event.type === 'init') {
+          if (event.tools.length > 0 || event.mcpServers > 0) {
+            this.dropSession(session)
+            throw new Error(`Claude Code started with tools enabled (${event.tools.join(', ') || 'MCP servers'}); refusing to use it`)
+          }
+        } else if (event.type === 'error') throw new Error(`Claude Code failed: ${event.message}`)
         else {
           if (signal?.aborted) return
           if (event.code !== 0) {
@@ -116,6 +131,7 @@ export class ClaudeCodeProvider implements AnswerProvider {
     const child = spawnImpl(
       this.options.command ?? 'claude',
       buildClaudeCodeArgs({ model: this.options.model, system: systemPromptFor(profile) }),
+      { cwd: this.options.cwd },
     )
     const session: Session = { child, profile, lastSentId: null, events: [], wake: null, stderr: '', closed: false }
     const push = (event: QueueEvent) => {
@@ -125,6 +141,7 @@ export class ClaudeCodeProvider implements AnswerProvider {
     }
     let partial = ''
     child.stdout.on('data', (chunk: Buffer | string) => {
+      if (session.closed) return
       partial += chunk.toString()
       let newline = partial.indexOf('\n')
       while (newline >= 0) {
@@ -133,9 +150,15 @@ export class ClaudeCodeProvider implements AnswerProvider {
         newline = partial.indexOf('\n')
         if (parsed) push(parsed)
       }
+      if (partial.length > MAX_LINE_CHARS) {
+        partial = ''
+        // The error is queued before the kill, so the reader sees the reason rather than a bare exit.
+        push({ type: 'error', message: 'output line too long; the process was stopped' })
+        this.dropSession(session)
+      }
     })
     child.stderr.on('data', (chunk: Buffer | string) => {
-      session.stderr += chunk.toString()
+      session.stderr = (session.stderr + chunk.toString()).slice(-MAX_STDERR_CHARS)
     })
     child.on('close', (code) => {
       session.closed = true

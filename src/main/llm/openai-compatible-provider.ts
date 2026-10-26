@@ -16,6 +16,8 @@ type OpenAIPart = { type: 'text'; text: string } | { type: 'image_url'; image_ur
 
 const DEFAULT_MAX_TOKENS = 1024
 const ERROR_SNIPPET_CHARS = 300
+/** A single SSE line longer than this is not a chat completion chunk; stop reading a misbehaving server. */
+const MAX_LINE_CHARS = 1_000_000
 
 const describe = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
@@ -75,6 +77,7 @@ export class OpenAICompatibleProvider implements AnswerProvider {
         const { done, value } = await reader.read()
         if (done) break
         buffer += decoder.decode(value, { stream: true })
+        if (buffer.length > MAX_LINE_CHARS) throw new Error('LLM response line too long; stopped reading')
         let newline = buffer.indexOf('\n')
         while (newline >= 0) {
           const line = buffer.slice(0, newline).trim()

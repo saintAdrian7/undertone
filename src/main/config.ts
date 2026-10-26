@@ -1,3 +1,5 @@
+import { validateBaseUrl } from '@shared/base-url'
+
 export const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-5-5'
 export const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1'
 export const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434/v1'
@@ -62,7 +64,7 @@ export function resolveConfig(env: Record<string, string | undefined>): AppConfi
     const model = trimmed(env.LLM_MODEL)
     if (!model) return { llm: null }
     const fallbackBase = selected === 'ollama' ? DEFAULT_OLLAMA_BASE_URL : DEFAULT_OPENAI_BASE_URL
-    const baseUrl = (trimmed(env.LLM_BASE_URL) ?? fallbackBase).replace(/\/+$/, '')
+    const baseUrl = validateBaseUrl(trimmed(env.LLM_BASE_URL) ?? fallbackBase)
     return { llm: { provider: 'openai', apiKey: trimmed(env.LLM_API_KEY), model, baseUrl } }
   }
 

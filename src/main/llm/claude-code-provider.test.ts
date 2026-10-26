@@ -64,7 +64,7 @@ describe('ClaudeCodeProvider', () => {
     expect(await collect(provider.stream({ question: 'first', transcript: [] }))).toEqual(['ok'])
     expect(await collect(provider.stream({ question: 'second', transcript: [] }))).toEqual(['ok'])
     expect(spawn).toHaveBeenCalledTimes(1)
-    expect(spawn).toHaveBeenCalledWith('claude', expect.arrayContaining(['-p', '--input-format', 'stream-json', '--model', 'sonnet']))
+    expect(spawn).toHaveBeenCalledWith('claude', expect.arrayContaining(['-p', '--input-format', 'stream-json', '--model', 'sonnet']), expect.anything())
     const lines = children[0]!.lines.map((l) => JSON.parse(l))
     expect(lines).toHaveLength(2)
     expect(lines[0].message.content[0].text).toContain('first')

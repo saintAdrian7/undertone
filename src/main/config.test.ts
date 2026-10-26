@@ -78,4 +78,9 @@ describe('resolveConfig', () => {
   it('rejects an unknown provider', () => {
     expect(() => resolveConfig({ LLM_PROVIDER: 'bard', LLM_MODEL: 'x' })).toThrow(/LLM_PROVIDER/)
   })
+
+  it('refuses a plaintext base url to a remote host, so keys never travel over http', () => {
+    expect(() => resolveConfig({ LLM_PROVIDER: 'openai', LLM_MODEL: 'm', LLM_BASE_URL: 'http://proxy.example/v1' })).toThrow(/https/i)
+    expect(resolveConfig({ LLM_PROVIDER: 'openai', LLM_MODEL: 'm', LLM_BASE_URL: 'http://localhost:1234/v1/' }).llm?.baseUrl).toBe('http://localhost:1234/v1')
+  })
 })

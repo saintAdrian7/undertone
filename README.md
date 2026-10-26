@@ -9,6 +9,20 @@ An open-source interview and meeting copilot for Windows (macOS overlay works; s
   <img src="docs/screenshots/chat.png" alt="The answer panel before a session starts" width="540">
 </p>
 
+## Why Undertone
+
+Undertone is the open-source alternative to Cluely, ParakeetAI, Interview Coder and the other paid interview and meeting copilots. Same idea, a floating assistant that hears the call and tells you what to say, with four differences that matter:
+
+| | Undertone | Typical paid copilots |
+|---|---|---|
+| Price | Free, MIT licence | Monthly subscription, "undetectability" often a paid tier |
+| Account | None. No sign-up, no login, no telemetry | Account required |
+| Transcription | On your machine (Whisper) | Audio uploaded to the vendor's servers |
+| Model | Your choice: Claude Code login, Anthropic, OpenAI-compatible, Ollama offline | Vendor's model, vendor's prompt |
+| Code | All of it, here, with tests | Closed |
+
+If you have used Cluely, you will feel at home: the pill, the panel, the shortcuts and the auto-answer flow follow the same layout, rebuilt from scratch.
+
 ## What it does
 
 - **Listens to both sides.** Your microphone and the system audio (the other party) are captured separately, so the transcript knows who said what.
@@ -61,6 +75,8 @@ To package a Windows build into `dist/win-unpacked` (electron-builder flips the 
 npm run dist
 ```
 
+The build is unsigned and has no installer or auto-update yet, so Windows SmartScreen will warn on first launch; signed releases are on the roadmap. If the Claude Code CLI is not on your PATH, set `CLAUDE_CODE_COMMAND` in your real environment to the full path of `claude.exe` (an npm `claude.cmd` shim will not work, because the CLI is started without a shell on purpose).
+
 ## Using it
 
 | Action | How |
@@ -82,7 +98,7 @@ Global shortcuts are first come, first served across the desktop. If another app
 
 ## Privacy
 
-Audio capture, voice detection and transcription never leave your machine. When an answer is generated, the recent transcript, your resume (if uploaded) and, with Screen on, a screenshot are sent to the model you configured and nowhere else. The resume text and model settings live in the app's user-data folder; the API key is stored there too and is never shown back to the interface. Nothing is fetched at runtime except the Whisper model on first use.
+Audio capture, voice detection and transcription never leave your machine. When an answer is generated, the recent transcript, your resume (if uploaded) and, with Screen on, a screenshot are sent to the model you configured and nowhere else. The resume text and model settings live in the app's user-data folder; an API key saved in Settings is encrypted there with the operating system's key store (DPAPI on Windows, Keychain on macOS) and is never shown back to the interface. Base URLs must be https unless they point at this machine, so a key never travels in the clear. Nothing is fetched at runtime except the Whisper model on first use.
 
 ## Please use it fairly
 

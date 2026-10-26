@@ -86,7 +86,7 @@ Settings chosen in the app (Settings > Model, saved as `llm.json` in the user-da
 - The sandboxed preload must be CommonJS (`electron.vite.config.ts` forces `format: 'cjs'`) and cannot load anything from node_modules. `src/shared/ipc-channels.ts` must stay dependency-free for this reason.
 - `.env` location: in development the app reads `.env` from the project root, then from the app path. A packaged app reads only `.env` in its user-data folder. Real environment variables override the file.
 - The Claude Code provider is spawned with `child_process.spawn` and no `shell` option. Keep it that way on Windows: the system prompt travels as a command-line argument, and a shell would mangle it.
-- `childEnvironment` strips `CLAUDECODE` and `CLAUDE_CODE_*` markers so a session started inside Claude Code does not leak them into the child. `CLAUDE_CONFIG_DIR` is kept.
+- `childEnvironment` strips the markers of an enclosing Claude Code session (`CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_SSE_PORT`, `CLAUDE_CODE_SESSION_ID`) and the app's own `ANTHROPIC_*`/`LLM_*` keys and endpoints; login tokens and `CLAUDE_CONFIG_DIR` are kept. The CLI runs in `userData/claude-cwd`, an empty folder, and the provider refuses the session if the init event lists any tool or MCP server.
 - Keys never leave the main process. The renderer receives `PublicLlmSettings`, which carries `hasApiKey` and never the key. Do not add key fields to any payload.
 - The renderer cannot change main-owned state. `RendererPatchSchema` is a strict object with no shortcuts, capture flags or `isAnswering`.
 - The renderer CSP lives in `src/renderer/index.html`. The dev server adds extra sources through `VITE_CSP_EXTRA` only while serving; do not widen the production policy.

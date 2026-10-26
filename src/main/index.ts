@@ -7,6 +7,7 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  safeStorage,
   screen,
   session,
   shell,
@@ -14,7 +15,7 @@ import {
   type IpcMainEvent,
   type IpcMainInvokeEvent,
 } from 'electron'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -32,8 +33,10 @@ import {
   type PublicLlmSettings,
 } from '@shared/ipc'
 import { APP_NAME, REPOSITORY_URL } from '@shared/brand'
-import { loadLlmSettings, publicLlmSettings, resolveConfigWith, saveLlmSettings, type LlmSettings } from './config-store'
+import { loadLlmSettings, mergeApiKey, publicLlmSettings, resolveConfigWith, saveLlmSettings, type KeyCipher, type LlmSettings } from './config-store'
 import { applyShortcutUpdate } from './shortcuts/update'
+import { createTrustedUrlCheck } from './trust'
+import { contentProtectionFor } from './overlay/window-options'
 import type { AnswerProvider, Screenshot } from '@shared/providers'
 import { RendererPatchSchema, type AppState, type ShortcutKey } from '@shared/state'
 import { applyTranscriptOp } from '@shared/transcript'
@@ -64,11 +67,7 @@ const DEV_RENDERER_URL = process.env.ELECTRON_RENDERER_URL
 const RENDERER_INDEX = join(__dirname, '../renderer/index.html')
 
 /** Only our own renderer may use IPC, media permissions or loopback capture. */
-function isTrustedUrl(url: string | undefined): boolean {
-  if (!url) return false
-  if (DEV_RENDERER_URL) return url.startsWith(new URL(DEV_RENDERER_URL).origin)
-  return url.startsWith(pathToFileURL(RENDERER_INDEX).href)
-}
+const isTrustedUrl = createTrustedUrlCheck({ devRendererUrl: DEV_RENDERER_URL, rendererIndexHref: pathToFileURL(RENDERER_INDEX).href })
 
 const isTrustedSender = (event: IpcMainInvokeEvent | IpcMainEvent): boolean => isTrustedUrl(event.senderFrame?.url)
 
@@ -86,17 +85,29 @@ function loadDotEnv(): Record<string, string> {
 const describe = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
 /** pdf-parse is loaded on first use; it pulls in pdf.js, which has no business in start-up time. */
+const MAX_PDF_PAGES = 30
+const PDF_TIMEOUT_MS = 20_000
+
 async function parsePdf(data: Buffer): Promise<string> {
   const { PDFParse } = await import('pdf-parse')
   const parser = new PDFParse({ data })
+  // A crafted PDF must not tie up the main process: a page cap and a deadline.
+  const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('That PDF took too long to read')), PDF_TIMEOUT_MS).unref())
   try {
-    return (await parser.getText()).text
+    return (await Promise.race([parser.getText({ first: MAX_PDF_PAGES }), timeout])).text
   } finally {
-    await parser.destroy()
+    await parser.destroy().catch(() => undefined)
   }
 }
 
-function createProvider(llm: LlmConfig | null): AnswerProvider | null {
+/** Electron's safeStorage as the key cipher; Linux's plain-text backend does not count as encryption. */
+const keyCipher: KeyCipher = {
+  available: () => safeStorage.isEncryptionAvailable() && (process.platform !== 'linux' || safeStorage.getSelectedStorageBackend() !== 'basic_text'),
+  encrypt: (text) => safeStorage.encryptString(text),
+  decrypt: (data) => safeStorage.decryptString(data),
+}
+
+function createProvider(llm: LlmConfig | null, cliCwd: string): AnswerProvider | null {
   if (!llm) return null
   if (llm.provider === 'anthropic') {
     return new ClaudeAnswerProvider({
@@ -106,7 +117,8 @@ function createProvider(llm: LlmConfig | null): AnswerProvider | null {
     })
   }
   if (llm.provider === 'claude-code') {
-    return new ClaudeCodeProvider({ command: process.env.CLAUDE_CODE_COMMAND?.trim() || 'claude', model: llm.model })
+    // Started in an empty folder of our own, so the CLI picks up no project memory and no lookalike binary from the launch directory.
+    return new ClaudeCodeProvider({ command: process.env.CLAUDE_CODE_COMMAND?.trim() || 'claude', model: llm.model, cwd: cliCwd })
   }
   return new OpenAICompatibleProvider({ baseUrl: llm.baseUrl ?? DEFAULT_OPENAI_BASE_URL, apiKey: llm.apiKey, model: llm.model })
 }
@@ -115,7 +127,10 @@ async function main(): Promise<void> {
   const userData = app.getPath('userData')
   const env = { ...loadDotEnv(), ...process.env }
   // Settings chosen in the Settings window win over .env.
-  let savedLlm = await loadLlmSettings(userData)
+  const cliCwd = join(userData, 'claude-cwd')
+  mkdirSync(cliCwd, { recursive: true })
+  if (!keyCipher.available()) log.warn('No OS key store available; a saved API key is written in plain text to the user-data folder')
+  let savedLlm = await loadLlmSettings(userData, keyCipher)
   let config: AppConfig = { llm: null }
   try {
     config = resolveConfigWith(env, savedLlm)
@@ -126,7 +141,7 @@ async function main(): Promise<void> {
   const windowsByKind = new Map<OverlayKind, BrowserWindow>()
   const loaded = new Set<OverlayKind>()
 
-  let provider = createProvider(config.llm)
+  let provider = createProvider(config.llm, cliCwd)
   if (provider) log.info(`Answer model: ${config.llm?.provider} ${config.llm?.model}`)
   else log.warn('No model configured; pick one in Settings, or set ANTHROPIC_API_KEY or LLM_PROVIDER and LLM_MODEL in .env')
 
@@ -139,8 +154,8 @@ async function main(): Promise<void> {
   async function switchLlm(next: LlmSettings): Promise<string | null> {
     try {
       const nextConfig = resolveConfigWith(env, next)
-      const nextProvider = createProvider(nextConfig.llm)
-      await saveLlmSettings(userData, next)
+      const nextProvider = createProvider(nextConfig.llm, cliCwd)
+      await saveLlmSettings(userData, next, keyCipher)
       void provider?.dispose?.()
       provider = nextProvider
       savedLlm = next
@@ -391,6 +406,16 @@ async function main(): Promise<void> {
     const guard = (event: IpcMainInvokeEvent | IpcMainEvent) => {
       if (!isTrustedSender(event)) throw new Error('IPC request from an untrusted frame')
     }
+    // Fire-and-forget channels: a throw here would be an uncaught main-process exception, so they only log.
+    const onGuarded = (channel: string, handler: (payload: unknown) => void) =>
+      ipcMain.on(channel, (event, payload: unknown) => {
+        if (!isTrustedSender(event)) return
+        try {
+          handler(payload)
+        } catch (error) {
+          log.warn(`${channel}: ${describe(error)}`)
+        }
+      })
     ipcMain.handle(IPC.getState, (event) => {
       guard(event)
       return store.get()
@@ -425,26 +450,15 @@ async function main(): Promise<void> {
       guard(event)
       return clearProfile()
     })
-    ipcMain.on(IPC.controlResetPosition, (event) => {
-      guard(event)
-      manager.resetControlPosition()
-    })
-    // The pill is dragged by hand (no native drag region) so a plain click can open settings.
-    ipcMain.on(IPC.controlDrag, (event, position: unknown) => {
-      guard(event)
-      const { x, y } = ControlDragSchema.parse(position)
-      const control = windowsByKind.get('control')
-      if (control && !control.isDestroyed()) control.setPosition(x, y)
-    })
-    ipcMain.on(IPC.controlDragEnd, (event) => {
-      guard(event)
+    onGuarded(IPC.controlResetPosition, () => manager.resetControlPosition())
+    // The pill is dragged by hand (no native drag region) so a plain click can open settings. Every
+    // position goes through the manager, which keeps the pill inside the work area.
+    onGuarded(IPC.controlDrag, (position) => manager.setControlPosition(ControlDragSchema.parse(position)))
+    onGuarded(IPC.controlDragEnd, () => {
       const control = windowsByKind.get('control')
       if (control && !control.isDestroyed()) manager.setControlPosition(control.getBounds())
     })
-    ipcMain.on(IPC.openSettings, (event) => {
-      guard(event)
-      openSettings()
-    })
+    onGuarded(IPC.openSettings, () => openSettings())
     ipcMain.handle(IPC.appInfo, (event) => {
       guard(event)
       return { name: APP_NAME, version: app.getVersion(), repository: REPOSITORY_URL }
@@ -460,26 +474,16 @@ async function main(): Promise<void> {
     ipcMain.handle(IPC.llmSet, (event, request: unknown) => {
       guard(event)
       const parsed = LlmSettingsRequestSchema.parse(request)
-      // A request without a key keeps the stored one for the same provider; the key itself never reaches the renderer.
-      const apiKey = parsed.apiKey ?? (savedLlm?.provider === parsed.provider ? savedLlm.apiKey : null)
-      return switchLlm({ provider: parsed.provider, model: parsed.model, baseUrl: parsed.baseUrl, apiKey })
+      // The stored key is reused only for the same provider and server, so a renderer cannot point it elsewhere.
+      return switchLlm({ provider: parsed.provider, model: parsed.model, baseUrl: parsed.baseUrl, apiKey: mergeApiKey(savedLlm, parsed) })
     })
     ipcMain.handle(IPC.shortcutsSet, (event, request: unknown) => {
       guard(event)
       return store.patch({ shortcuts: applyShortcutUpdate(store.get().shortcuts, ShortcutUpdateSchema.parse(request)) })
     })
-    ipcMain.on(IPC.toggleSession, (event) => {
-      guard(event)
-      toggleListening()
-    })
-    ipcMain.on(IPC.toggleChat, (event) => {
-      guard(event)
-      store.patch({ showChat: !store.get().showChat })
-    })
-    ipcMain.on(IPC.quit, (event) => {
-      guard(event)
-      quitApp()
-    })
+    onGuarded(IPC.toggleSession, () => toggleListening())
+    onGuarded(IPC.toggleChat, () => store.patch({ showChat: !store.get().showChat }))
+    onGuarded(IPC.quit, () => quitApp())
   }
 
   let settingsWindow: BrowserWindow | null = null
@@ -510,7 +514,7 @@ async function main(): Promise<void> {
       },
     })
     settingsWindow = win
-    win.setContentProtection(store.get().isInvisible)
+    win.setContentProtection(contentProtectionFor(store.get()))
     win.once('ready-to-show', () => win.show())
     win.on('closed', () => {
       if (settingsWindow === win) settingsWindow = null
@@ -570,7 +574,8 @@ async function main(): Promise<void> {
     syncTray(state)
     broadcast(IPC.stateUpdated, state)
     watchForQuestions(previous, state)
-    if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.setContentProtection(state.isInvisible)
+    // Hidden from screen share when the overlay is, and from our own screenshots always (it may show the resume).
+    if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.setContentProtection(contentProtectionFor(state))
     // Only a packaged build registers itself; in development that would register the Electron binary.
     if (state.openAtLogin !== previous.openAtLogin && app.isPackaged) app.setLoginItemSettings({ openAtLogin: state.openAtLogin })
     previous = state
@@ -605,4 +610,10 @@ if (!app.requestSingleInstanceLock()) {
   void app.whenReady().then(main)
   app.on('will-quit', () => globalShortcut.unregisterAll())
   app.on('window-all-closed', () => app.quit())
+  // Belt and braces for any window a future change forgets to guard: no navigation, no webviews, no popups.
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('will-navigate', (event) => event.preventDefault())
+    contents.on('will-attach-webview', (event) => event.preventDefault())
+    contents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  })
 }
