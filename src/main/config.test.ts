@@ -70,6 +70,11 @@ describe('resolveConfig', () => {
     })
   })
 
+  it('selects the Claude Code CLI, which needs no key, with a default model', () => {
+    expect(resolveConfig({ LLM_PROVIDER: 'claude-code' }).llm).toEqual({ provider: 'claude-code', apiKey: null, model: 'sonnet', baseUrl: null })
+    expect(resolveConfig({ LLM_PROVIDER: 'claude-code', LLM_MODEL: 'opus' }).llm?.model).toBe('opus')
+  })
+
   it('rejects an unknown provider', () => {
     expect(() => resolveConfig({ LLM_PROVIDER: 'bard', LLM_MODEL: 'x' })).toThrow(/LLM_PROVIDER/)
   })
