@@ -1,5 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import { AskRequestSchema, CancelRequestSchema, TranscriptOpSchema, MAX_QUESTION_CHARS } from './ipc'
+import { AskRequestSchema, CancelRequestSchema, LlmSettingsRequestSchema, ShortcutUpdateSchema, TranscriptOpSchema, MAX_QUESTION_CHARS } from './ipc'
+
+describe('ShortcutUpdateSchema', () => {
+  it('accepts a known action with an accelerator or null and nothing else', () => {
+    expect(ShortcutUpdateSchema.parse({ key: 'ask', accelerator: 'CommandOrControl+K' })).toEqual({ key: 'ask', accelerator: 'CommandOrControl+K' })
+    expect(ShortcutUpdateSchema.parse({ key: 'ask', accelerator: null }).accelerator).toBeNull()
+    expect(() => ShortcutUpdateSchema.parse({ key: 'nope', accelerator: 'F1' })).toThrow()
+    expect(() => ShortcutUpdateSchema.parse({ key: 'ask', accelerator: 'x'.repeat(100) })).toThrow()
+  })
+})
+
+describe('LlmSettingsRequestSchema', () => {
+  it('accepts a provider choice with optional key and base url', () => {
+    expect(LlmSettingsRequestSchema.parse({ provider: 'claude-code', model: 'haiku', baseUrl: null })).toEqual({
+      provider: 'claude-code',
+      model: 'haiku',
+      baseUrl: null,
+    })
+    expect(LlmSettingsRequestSchema.parse({ provider: 'openai', model: 'm', baseUrl: 'https://x/v1', apiKey: 'k' }).apiKey).toBe('k')
+    expect(() => LlmSettingsRequestSchema.parse({ provider: 'bing', model: 'm', baseUrl: null })).toThrow()
+    expect(() => LlmSettingsRequestSchema.parse({ provider: 'openai', model: '', baseUrl: null })).toThrow()
+  })
+})
 
 describe('TranscriptOpSchema', () => {
   it('accepts add, resolve, remove and clear operations', () => {
