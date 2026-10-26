@@ -17,6 +17,8 @@ export interface AnswerRequest {
 /** Streams answer text chunks. Implementations live in the main process so API keys stay there. */
 export interface AnswerProvider {
   stream(request: AnswerRequest, signal?: AbortSignal): AsyncIterable<string>
+  /** Prepares anything long-lived ahead of the first ask, such as a child process. */
+  warm?(profile: string | null): void
   /** Releases anything long-lived, such as a child process. */
   dispose?(): Promise<void>
 }

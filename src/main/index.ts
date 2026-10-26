@@ -217,7 +217,17 @@ function main(): void {
   void loadProfile(profileDir).then((loaded) => {
     profile = loaded
     store.patch({ profileName: loaded?.name ?? null })
+    warmProvider()
   })
+
+  /** The model's start-up cost is paid now rather than on the first question. */
+  function warmProvider(): void {
+    try {
+      provider?.warm?.(profile?.text ?? null)
+    } catch (error) {
+      log.warn(`Warming the model failed: ${describe(error)}`)
+    }
+  }
 
   const answers = createAnswerService({
     provider,
@@ -245,6 +255,7 @@ function main(): void {
       profile = { name: basename(path), text }
       await saveProfile(profileDir, profile)
       store.patch({ profileName: profile.name })
+      warmProvider()
       return null
     } catch (error) {
       log.warn(`Resume import failed: ${describe(error)}`)
@@ -256,6 +267,7 @@ function main(): void {
     profile = null
     await saveProfile(profileDir, null)
     store.patch({ profileName: null })
+    warmProvider()
   }
 
   // Answers come on their own once the interviewer asks something and stops talking.
@@ -271,6 +283,7 @@ function main(): void {
   function toggleListening(): void {
     const state = store.get()
     const starting = !state.isListening
+    if (starting) warmProvider()
     store.patch({
       isListening: starting,
       transcript: starting ? [] : state.transcript,

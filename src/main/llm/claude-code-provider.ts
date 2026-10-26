@@ -94,6 +94,11 @@ export class ClaudeCodeProvider implements AnswerProvider {
     }
   }
 
+  /** Starts the CLI process now, so the first answer does not pay its multi-second start-up. */
+  warm(profile: string | null): void {
+    this.ensureSession(profile)
+  }
+
   /** Ends the CLI process; the next ask starts a fresh one. */
   async dispose(): Promise<void> {
     if (this.session) this.dropSession(this.session)
