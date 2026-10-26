@@ -21,6 +21,21 @@ describe('LlmSettingsRequestSchema', () => {
     expect(() => LlmSettingsRequestSchema.parse({ provider: 'bing', model: 'm', baseUrl: null })).toThrow()
     expect(() => LlmSettingsRequestSchema.parse({ provider: 'openai', model: '', baseUrl: null })).toThrow()
   })
+  it('rejects plaintext remote base urls and model names that could be flags', () => {
+    expect(() => LlmSettingsRequestSchema.parse({ provider: 'openai', model: 'm', baseUrl: 'http://proxy.example/v1' })).toThrow(/https/i)
+    expect(() => LlmSettingsRequestSchema.parse({ provider: 'claude-code', model: '--dangerously-skip', baseUrl: null })).toThrow()
+    expect(() => LlmSettingsRequestSchema.parse({ provider: 'claude-code', model: 'son net', baseUrl: null })).toThrow()
+    expect(LlmSettingsRequestSchema.parse({ provider: 'openai', model: 'meta-llama/llama-3.3-70b-instruct:free', baseUrl: 'https://openrouter.ai/api/v1' }).model).toContain('llama')
+  })
+})
+
+describe('ControlDragSchema', () => {
+  it('bounds the coordinates', async () => {
+    const { ControlDragSchema } = await import('./ipc')
+    expect(ControlDragSchema.parse({ x: -100, y: 40 })).toEqual({ x: -100, y: 40 })
+    expect(() => ControlDragSchema.parse({ x: 1e9, y: 0 })).toThrow()
+    expect(() => ControlDragSchema.parse({ x: 1.5, y: 0 })).toThrow()
+  })
 })
 
 describe('TranscriptOpSchema', () => {

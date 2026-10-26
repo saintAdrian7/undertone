@@ -23,14 +23,41 @@ describe('buildClaudeCodeArgs', () => {
     // No tools, no MCP servers and no user settings may leak into the answer.
     expect(args.slice(args.indexOf('--tools'), args.indexOf('--tools') + 2)).toEqual(['--tools', ''])
     expect(args).toContain('--strict-mcp-config')
+    expect(args).toContain('--disable-slash-commands')
     expect(args.slice(args.indexOf('--setting-sources'), args.indexOf('--setting-sources') + 2)).toEqual(['--setting-sources', ''])
   })
 })
 
 describe('childEnvironment', () => {
-  it('drops the markers of an enclosing Claude Code session but keeps the config dir and everything else', () => {
-    const env = childEnvironment({ PATH: 'x', CLAUDECODE: '1', CLAUDE_CODE_SESSION_ID: 's', CLAUDE_CODE_ENTRYPOINT: 'cli', CLAUDE_CONFIG_DIR: 'C:\\cfg', HOME: 'h' })
-    expect(env).toEqual({ PATH: 'x', CLAUDE_CONFIG_DIR: 'C:\\cfg', HOME: 'h' })
+  it('drops the markers of an enclosing Claude Code session but keeps the config dir, login tokens and everything else', () => {
+    const env = childEnvironment({
+      PATH: 'x',
+      CLAUDECODE: '1',
+      CLAUDE_CODE_SESSION_ID: 's',
+      CLAUDE_CODE_ENTRYPOINT: 'cli',
+      CLAUDE_CODE_SSE_PORT: '1',
+      CLAUDE_CODE_OAUTH_TOKEN: 'tok',
+      CLAUDE_CONFIG_DIR: 'C:\\cfg',
+      HOME: 'h',
+    })
+    expect(env).toEqual({ PATH: 'x', CLAUDE_CODE_OAUTH_TOKEN: 'tok', CLAUDE_CONFIG_DIR: 'C:\\cfg', HOME: 'h' })
+  })
+
+  it('never hands the app\'s own API keys or base urls to the CLI', () => {
+    const env = childEnvironment({ ANTHROPIC_API_KEY: 'k', ANTHROPIC_BASE_URL: 'u', LLM_API_KEY: 'k2', LLM_BASE_URL: 'u2', PATH: 'x' })
+    expect(env).toEqual({ PATH: 'x' })
+  })
+})
+
+describe('parseStreamLine init', () => {
+  it('reports which tools and MCP servers the CLI started with', () => {
+    expect(parseStreamLine(JSON.stringify({ type: 'system', subtype: 'init', tools: ['Bash'], mcp_servers: [{ name: 'x' }] }))).toEqual({
+      type: 'init',
+      tools: ['Bash'],
+      mcpServers: 1,
+    })
+    expect(parseStreamLine(JSON.stringify({ type: 'system', subtype: 'init', tools: [], mcp_servers: [] }))).toEqual({ type: 'init', tools: [], mcpServers: 0 })
+    expect(parseStreamLine(JSON.stringify({ type: 'system', subtype: 'status' }))).toBeNull()
   })
 })
 
@@ -81,7 +108,7 @@ describe('parseStreamLine', () => {
   it('ignores bookkeeping, other deltas, blank and malformed lines', () => {
     expect(parseStreamLine('')).toBeNull()
     expect(parseStreamLine('not json')).toBeNull()
-    expect(parseStreamLine(JSON.stringify({ type: 'system', subtype: 'init' }))).toBeNull()
+    expect(parseStreamLine(JSON.stringify({ type: 'system', subtype: 'hook' }))).toBeNull()
     expect(parseStreamLine(JSON.stringify({ type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'input_json_delta' } } }))).toBeNull()
     expect(parseStreamLine(JSON.stringify({ type: 'assistant', message: {} }))).toBeNull()
   })

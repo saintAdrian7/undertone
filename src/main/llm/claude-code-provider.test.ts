@@ -142,6 +142,35 @@ describe('ClaudeCodeProvider', () => {
     expect(spawn).toHaveBeenCalledTimes(2)
   })
 
+  it('starts the CLI in the given working directory', async () => {
+    const children: FakeChild[] = []
+    const spawn = vi.fn<SpawnLike>(() => {
+      const child = new FakeChild()
+      child.onLine = () => setTimeout(() => reply('ok')(child), 0)
+      children.push(child)
+      return child
+    })
+    const provider = new ClaudeCodeProvider({ command: 'claude', model: 'sonnet', spawn, cwd: 'C:\\cwd' })
+    await collect(provider.stream({ question: 'q', transcript: [] }))
+    expect(spawn).toHaveBeenCalledWith('claude', expect.any(Array), { cwd: 'C:\\cwd' })
+  })
+
+  it('fails closed when the CLI reports tools or MCP servers at start-up', async () => {
+    const { provider, children } = setup((child) => {
+      child.stdout.write(JSON.stringify({ type: 'system', subtype: 'init', tools: ['Bash'], mcp_servers: [] }) + '\n')
+    })
+    await expect(collect(provider.stream({ question: 'q', transcript: [] }))).rejects.toThrow(/tools/i)
+    expect(children[0]!.kill).toHaveBeenCalled()
+  })
+
+  it('gives up on a line that never ends instead of buffering it forever', async () => {
+    const { provider, children } = setup((child) => {
+      child.stdout.write('x'.repeat(1_100_000))
+    })
+    await expect(collect(provider.stream({ question: 'q', transcript: [] }))).rejects.toThrow(/too long/i)
+    expect(children[0]!.kill).toHaveBeenCalled()
+  })
+
   it('dispose kills a live process', async () => {
     const { provider, children } = setup(reply('ok'))
     await collect(provider.stream({ question: 'q', transcript: [] }))
