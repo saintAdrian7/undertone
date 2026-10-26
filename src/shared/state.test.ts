@@ -20,11 +20,13 @@ describe('RendererPatchSchema', () => {
     expect(() => RendererPatchSchema.parse({ controlWidth: 5000 })).toThrow()
   })
 
-  it('lets the renderer toggle automatic answers but not the profile name', () => {
+  it('lets the renderer toggle automatic answers but not the profile name or answering flag', () => {
     expect(defaultState().autoAnswer).toBe(true)
     expect(defaultState().profileName).toBeNull()
+    expect(defaultState().isAnswering).toBe(false)
     expect(RendererPatchSchema.parse({ autoAnswer: false })).toEqual({ autoAnswer: false })
     expect(() => RendererPatchSchema.parse({ profileName: 'x' })).toThrow()
+    expect(() => RendererPatchSchema.parse({ isAnswering: true })).toThrow()
   })
 
   it('caps the chat height', () => {
