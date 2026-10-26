@@ -172,3 +172,26 @@ button.listening {
 .composer input:focus {
   border-color: var(--accent);
 }
+
+.profile-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.profile-row .link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+
+.profile-row [role='alert'] {
+  color: #ff8a80;
+}

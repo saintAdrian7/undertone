@@ -3,7 +3,15 @@ import { IPC } from '@shared/ipc-channels'
 import type { IpcBridge } from '@shared/ipc'
 
 // Runtime allowlists: a script in the renderer cannot reach channels outside the contract.
-const INVOKE_CHANNELS = new Set<string>([IPC.getState, IPC.patchState, IPC.transcriptApply, IPC.ask, IPC.cancelAsk])
+const INVOKE_CHANNELS = new Set<string>([
+  IPC.getState,
+  IPC.patchState,
+  IPC.transcriptApply,
+  IPC.ask,
+  IPC.cancelAsk,
+  IPC.profilePick,
+  IPC.profileClear,
+])
 const SEND_CHANNELS = new Set<string>([IPC.toggleSession, IPC.controlResetPosition, IPC.toggleChat, IPC.quit])
 const EVENT_CHANNELS = new Set<string>([
   IPC.stateUpdated,

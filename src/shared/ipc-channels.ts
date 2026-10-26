@@ -10,6 +10,8 @@ export const IPC = {
   transcriptApply: 'transcript:apply',
   ask: 'answer:ask',
   cancelAsk: 'answer:cancel',
+  profilePick: 'profile:pick',
+  profileClear: 'profile:clear',
   // renderer → main (send)
   toggleSession: 'session:toggle',
   controlResetPosition: 'control:reset-position',

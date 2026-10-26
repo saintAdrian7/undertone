@@ -1,25 +1,26 @@
-import type { AnswerRequest } from '@shared/providers'
+import type { AnswerRequest, Screenshot } from '@shared/providers'
 import { MAX_QUESTION_CHARS } from '@shared/ipc'
 import { formatTranscript } from './prompt'
 
 /**
- * Translation to and from the Claude Code CLI (`claude -p --output-format stream-json`).
- * Flags and event shapes follow the CLI's `--help` and a live probe of version 2.1.x.
+ * Translation to and from the Claude Code CLI (`claude -p --output-format stream-json --input-format stream-json`).
+ * Flags and event shapes follow the CLI's `--help` and a live probe of version 2.1.x: with stream-json input the
+ * process stays alive and answers each user message line in turn, so one process serves a whole session.
  */
 
 export interface ClaudeCodeArgs {
   model: string
   system: string
-  /** Allow only the Read tool, so the model can open a saved screenshot. */
-  allowRead?: boolean
 }
 
 const DEFAULT_QUESTION = 'What should I say next?'
 
-export function buildClaudeCodeArgs({ model, system, allowRead = false }: ClaudeCodeArgs): string[] {
+export function buildClaudeCodeArgs({ model, system }: ClaudeCodeArgs): string[] {
   return [
     '-p',
     '--output-format',
+    'stream-json',
+    '--input-format',
     'stream-json',
     '--include-partial-messages',
     '--verbose',
@@ -30,21 +31,36 @@ export function buildClaudeCodeArgs({ model, system, allowRead = false }: Claude
     system,
     // Claude Code's own tools, MCP servers and user settings must not leak into the answer.
     '--tools',
-    allowRead ? 'Read' : '',
+    '',
     '--strict-mcp-config',
     '--setting-sources',
     '',
   ]
 }
 
-/** The single prompt the CLI receives on stdin: transcript, optional screenshot pointer, question. */
-export function renderPrompt(request: AnswerRequest, screenshotPath?: string): string {
+export interface PromptCursor {
+  /** Id of the last transcript entry the session has already seen; only later lines are sent. */
+  afterId: string | null
+}
+
+/** The text of one user turn: the transcript (or just the lines since the last turn) and the question. */
+export function renderPrompt(request: AnswerRequest, cursor?: PromptCursor): string {
   const question = request.question.trim().slice(0, MAX_QUESTION_CHARS) || DEFAULT_QUESTION
-  const transcript = formatTranscript(request.transcript) || '(no transcript yet)'
-  const parts = [`Live transcript (most recent last):\n${transcript}`]
-  if (screenshotPath) parts.push(`A screenshot of my screen is saved at ${screenshotPath}. Read that file before answering.`)
-  parts.push(`Question: ${question}`)
-  return parts.join('\n\n')
+  const seen = cursor?.afterId ? request.transcript.findIndex((entry) => entry.id === cursor.afterId) : -1
+  const entries = seen >= 0 ? request.transcript.slice(seen + 1) : request.transcript
+  const transcript = formatTranscript(entries)
+  const heading = seen >= 0 ? 'Transcript since your last answer (most recent last)' : 'Live transcript (most recent last)'
+  const body = transcript || (seen >= 0 ? '(nothing new was said)' : '(no transcript yet)')
+  return `${heading}:\n${body}\n\nQuestion: ${question}`
+}
+
+/** One stream-json user message line, with the screenshot inlined as an image block. */
+export function renderUserMessage({ text, screenshot }: { text: string; screenshot?: Screenshot }): string {
+  const content: unknown[] = [{ type: 'text', text }]
+  if (screenshot) {
+    content.push({ type: 'image', source: { type: 'base64', media_type: screenshot.contentType, data: screenshot.dataBase64 } })
+  }
+  return JSON.stringify({ type: 'user', message: { role: 'user', content } }) + '\n'
 }
 
 /**
@@ -57,7 +73,7 @@ export function childEnvironment(env: Record<string, string | undefined>): Recor
   )
 }
 
-export type StreamLine ={ type: 'text'; text: string } | { type: 'done' } | { type: 'error'; message: string }
+export type StreamLine = { type: 'text'; text: string } | { type: 'done' } | { type: 'error'; message: string }
 
 /** One line of stream-json output, or null when it is session bookkeeping. */
 export function parseStreamLine(line: string): StreamLine | null {

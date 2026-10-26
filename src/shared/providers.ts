@@ -10,11 +10,15 @@ export interface AnswerRequest {
   transcript: TranscriptEntry[]
   screenshot?: Screenshot
   modeInstruction?: string
+  /** The user's resume or notes, so answers draw on their real experience. */
+  profile?: string | null
 }
 
 /** Streams answer text chunks. Implementations live in the main process so API keys stay there. */
 export interface AnswerProvider {
   stream(request: AnswerRequest, signal?: AbortSignal): AsyncIterable<string>
+  /** Releases anything long-lived, such as a child process. */
+  dispose?(): Promise<void>
 }
 
 export interface TranscriptionInput {

@@ -6,6 +6,7 @@ export interface ControlBarProps {
   onToggleChat(): void
   onToggleInvisible(): void
   onToggleScreenUse(): void
+  onToggleAutoAnswer(): void
   onQuit?(): void
 }
 
@@ -15,7 +16,15 @@ function speakerLabel(state: AppState): string {
   return 'Listening'
 }
 
-export function ControlBar({ state, onToggleListening, onToggleChat, onToggleInvisible, onToggleScreenUse, onQuit }: ControlBarProps) {
+export function ControlBar({
+  state,
+  onToggleListening,
+  onToggleChat,
+  onToggleInvisible,
+  onToggleScreenUse,
+  onToggleAutoAnswer,
+  onQuit,
+}: ControlBarProps) {
   const screenOn = state.screenUse === 'required'
   return (
     <div className="control-bar" role="toolbar" aria-label="Meeting Copilot">
@@ -47,6 +56,15 @@ export function ControlBar({ state, onToggleListening, onToggleChat, onToggleInv
         title={screenOn ? 'A screenshot is sent with each question' : 'Questions are sent without a screenshot'}
       >
         {screenOn ? 'Screen on' : 'Screen off'}
+      </button>
+      <button
+        type="button"
+        onClick={onToggleAutoAnswer}
+        aria-label="Automatic answers"
+        aria-pressed={state.autoAnswer}
+        title={state.autoAnswer ? 'Answers appear on their own after each interviewer question' : 'Answers only when you ask'}
+      >
+        {state.autoAnswer ? 'Auto on' : 'Auto off'}
       </button>
       {state.isListening && <span className="speaker">{speakerLabel(state)}</span>}
       {onQuit && (

@@ -25,6 +25,7 @@
     "@ricky0123/vad-web": "^0.0.31",
     "electron-log": "^5.4.4",
     "onnxruntime-web": "^1.30.0",
+    "pdf-parse": "^2.4.5",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "zod": "^4.6.7"

@@ -2,6 +2,7 @@ import {
   app,
   BrowserWindow,
   desktopCapturer,
+  dialog,
   globalShortcut,
   ipcMain,
   Menu,
@@ -13,7 +14,8 @@ import {
   type IpcMainInvokeEvent,
 } from 'electron'
 import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFile, stat } from 'node:fs/promises'
+import { basename, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import log from 'electron-log/main'
 import Anthropic from '@anthropic-ai/sdk'
@@ -26,6 +28,8 @@ import { createOverlayManager, type OverlayWindow } from './overlay/manager'
 import type { OverlayKind, OverlayWindowOptions } from './overlay/window-options'
 import { createShortcutSyncer } from './shortcuts/syncer'
 import { createAnswerService } from './answer/service'
+import { createAutoAnswerScheduler, newlyFinishedInterviewerLines } from './answer/auto-answer'
+import { extractProfileText, loadProfile, saveProfile, PROFILE_EXTENSIONS, type Profile } from './profile/store'
 import { renderTrayIconPng } from './tray/icon'
 import { trayMenuTemplate } from './tray/menu'
 import { selectLoopbackSource } from './capture/sources'
@@ -39,6 +43,7 @@ log.initialize()
 
 const MOVE_STEP_PX = 80
 const SCROLL_STEP_PX = 240
+const MAX_PROFILE_FILE_BYTES = 20 * 1024 * 1024
 const ALLOWED_PERMISSIONS = new Set(['media', 'display-capture'])
 
 const DEV_RENDERER_URL = process.env.ELECTRON_RENDERER_URL
@@ -65,6 +70,17 @@ function loadDotEnv(): Record<string, string> {
 }
 
 const describe = (error: unknown): string => (error instanceof Error ? error.message : String(error))
+
+/** pdf-parse is loaded on first use; it pulls in pdf.js, which has no business in start-up time. */
+async function parsePdf(data: Buffer): Promise<string> {
+  const { PDFParse } = await import('pdf-parse')
+  const parser = new PDFParse({ data })
+  try {
+    return (await parser.getText()).text
+  } finally {
+    await parser.destroy()
+  }
+}
 
 function createProvider(llm: LlmConfig | null): AnswerProvider | null {
   if (!llm) return null
@@ -196,7 +212,61 @@ function main(): void {
     })
   }
 
-  const answers = createAnswerService({ provider, getState: () => store.get(), capture, log: { warn: (m) => log.warn(m) } })
+  let profile: Profile | null = null
+  const profileDir = app.getPath('userData')
+  void loadProfile(profileDir).then((loaded) => {
+    profile = loaded
+    store.patch({ profileName: loaded?.name ?? null })
+  })
+
+  const answers = createAnswerService({
+    provider,
+    getState: () => store.get(),
+    capture,
+    getProfile: () => profile?.text ?? null,
+    log: { warn: (m) => log.warn(m) },
+  })
+
+  /** Returns an error message for the renderer, or null when the profile changed or the user cancelled. */
+  async function pickProfile(): Promise<string | null> {
+    const chat = windowsByKind.get('chat')
+    const options = {
+      title: 'Choose your resume or notes',
+      properties: ['openFile' as const],
+      filters: [{ name: 'Resume', extensions: [...PROFILE_EXTENSIONS] }],
+    }
+    const result = chat && !chat.isDestroyed() ? await dialog.showOpenDialog(chat, options) : await dialog.showOpenDialog(options)
+    const path = result.filePaths[0]
+    if (result.canceled || !path) return null
+    try {
+      if ((await stat(path)).size > MAX_PROFILE_FILE_BYTES) return 'That file is larger than 20 MB'
+      const text = await extractProfileText(path, await readFile(path), { parsePdf })
+      if (!text) return 'No text could be read from that file'
+      profile = { name: basename(path), text }
+      await saveProfile(profileDir, profile)
+      store.patch({ profileName: profile.name })
+      return null
+    } catch (error) {
+      log.warn(`Resume import failed: ${describe(error)}`)
+      return describe(error)
+    }
+  }
+
+  async function clearProfile(): Promise<void> {
+    profile = null
+    await saveProfile(profileDir, null)
+    store.patch({ profileName: null })
+  }
+
+  // Answers come on their own once the interviewer asks something and stops talking.
+  const autoAnswer = createAutoAnswerScheduler({
+    trigger: () => {
+      const state = store.get()
+      if (!state.autoAnswer || !state.isListening) return
+      if (!state.showChat) store.patch({ showChat: true })
+      broadcast(IPC.chatSubmit, undefined)
+    },
+  })
 
   function toggleListening(): void {
     const state = store.get()
@@ -289,6 +359,14 @@ function main(): void {
       guard(event)
       answers.cancel(CancelRequestSchema.parse(request).requestId)
     })
+    ipcMain.handle(IPC.profilePick, (event) => {
+      guard(event)
+      return pickProfile()
+    })
+    ipcMain.handle(IPC.profileClear, (event) => {
+      guard(event)
+      return clearProfile()
+    })
     ipcMain.on(IPC.controlResetPosition, (event) => {
       guard(event)
       manager.resetControlPosition()
@@ -310,6 +388,8 @@ function main(): void {
   /** The overlay windows are `closable: false`, so a plain `app.quit()` stalls; tear them down first. */
   function quitApp(): void {
     shortcuts.dispose()
+    autoAnswer.cancel()
+    void provider?.dispose?.()
     tray?.destroy()
     tray = null
     manager.dispose()
@@ -340,12 +420,25 @@ function main(): void {
     )
   }
 
+  let previous = store.get()
   store.subscribe((state) => {
     manager.update(state)
     shortcuts.sync(state)
     syncTray(state)
     broadcast(IPC.stateUpdated, state)
+    watchForQuestions(previous, state)
+    previous = state
   })
+
+  function watchForQuestions(before: AppState, after: AppState): void {
+    if (!after.isListening || !after.autoAnswer) {
+      if (before.isListening !== after.isListening || before.autoAnswer !== after.autoAnswer) autoAnswer.cancel()
+      return
+    }
+    for (const line of newlyFinishedInterviewerLines(before.transcript, after.transcript)) autoAnswer.onInterviewerLine(line.text)
+    if (before.themHasVoiceActivity !== after.themHasVoiceActivity) autoAnswer.onInterviewerActivity(after.themHasVoiceActivity)
+    if (before.meHasVoiceActivity !== after.meHasVoiceActivity) autoAnswer.onUserActivity(after.meHasVoiceActivity)
+  }
 
   hardenSession()
   registerIpc()
