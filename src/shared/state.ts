@@ -62,6 +62,8 @@ export const AppStateSchema = z.object({
   autoAnswer: z.boolean().default(true),
   /** File name of the uploaded resume or notes, kept by the main process. */
   profileName: z.string().nullable().default(null),
+  /** True while an answer is streaming; the pill's Ask label shimmers. Main-owned. */
+  isAnswering: z.boolean().default(false),
 })
 
 export type AppState = z.infer<typeof AppStateSchema>

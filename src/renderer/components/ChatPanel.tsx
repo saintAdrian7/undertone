@@ -1,7 +1,9 @@
 import { useState, type KeyboardEvent } from 'react'
+import { ArrowUp, ChevronDown, CircleAlert, Ellipsis, MessageCircleMore, RotateCw, X } from 'lucide-react'
 import type { TranscriptEntry } from '@shared/state'
 import { formatRelative } from '@shared/time'
 import type { ModelStatus } from '../stt/whisper-provider'
+import { Menu, type MenuItem } from './Menu'
 
 export type AnswerStatus = 'idle' | 'streaming' | 'done' | 'error'
 
@@ -10,101 +12,168 @@ export interface ChatPanelProps {
   answer: string
   status: AnswerStatus
   error: string | null
+  isListening: boolean
   screenshotAttached?: boolean
   modelStatus?: ModelStatus
+  lastQuestion?: string
   profileName?: string | null
   profileError?: string | null
+  autoAnswer?: boolean
+  isInvisible?: boolean
+  screenUse?: 'off' | 'required'
   onAsk(question: string): void
   onClear(): void
+  onRetry?(): void
+  onHide?(): void
+  onToggleListening?(): void
+  onToggleAutoAnswer?(): void
+  onToggleInvisible?(): void
+  onToggleScreenUse?(): void
   onPickProfile?(): void
   onClearProfile?(): void
+  onDismissProfileError?(): void
+  onQuit?(): void
 }
 
-const speaker = (entry: TranscriptEntry): string => (entry.role === 'them' ? 'Interviewer' : 'Me')
+const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
 
-export function ChatPanel({
-  transcript,
-  answer,
-  status,
-  error,
-  screenshotAttached = false,
-  modelStatus = 'idle',
-  profileName = null,
-  profileError = null,
-  onAsk,
-  onClear,
-  onPickProfile,
-  onClearProfile,
-}: ChatPanelProps) {
+export function ChatPanel(props: ChatPanelProps) {
+  const { transcript, answer, status, error, isListening, screenshotAttached = false, modelStatus = 'idle', profileName = null, profileError = null } = props
   const [draft, setDraft] = useState('')
 
-  const submit = () => {
-    const question = draft.trim()
-    if (!question) return
-    onAsk(question)
+  const submit = (text: string) => {
+    props.onAsk(text.trim())
     setDraft('')
   }
 
-  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== 'Enter' || event.shiftKey) return
     event.preventDefault()
-    submit()
+    if (draft.trim()) submit(draft)
   }
 
+  const hasContent = transcript.length > 0 || answer.length > 0 || status !== 'idle'
+  const expanded = hasContent || isListening || props.onToggleListening !== undefined
+  const stripMessage = status === 'error' && error ? error : profileError
+  const dismissStrip = status === 'error' && error ? props.onClear : (props.onDismissProfileError ?? props.onClear)
+
+  const menu: MenuItem[] = [
+    ...(props.onToggleAutoAnswer ? [{ kind: 'check', label: 'Automatic answers', checked: props.autoAnswer ?? false, onSelect: props.onToggleAutoAnswer } as const] : []),
+    ...(props.onToggleScreenUse
+      ? [{ kind: 'check', label: 'Send a screenshot with each question', checked: props.screenUse === 'required', onSelect: props.onToggleScreenUse } as const]
+      : []),
+    ...(props.onToggleInvisible ? [{ kind: 'check', label: 'Hidden from screen share', checked: props.isInvisible ?? false, onSelect: props.onToggleInvisible } as const] : []),
+    ...(props.onPickProfile
+      ? profileName
+        ? [
+            { kind: 'separator' } as const,
+            { kind: 'label', label: `Resume: ${profileName}` } as const,
+            { kind: 'action', label: 'Replace resume', onSelect: props.onPickProfile } as const,
+            ...(props.onClearProfile ? [{ kind: 'action', label: 'Remove resume', onSelect: props.onClearProfile } as const] : []),
+          ]
+        : [{ kind: 'separator' } as const, { kind: 'action', label: 'Upload resume (.txt, .md or .pdf)', onSelect: props.onPickProfile } as const]
+      : []),
+    { kind: 'separator' },
+    { kind: 'action', label: 'Clear answer', onSelect: props.onClear },
+    ...(props.onQuit ? [{ kind: 'action', label: 'Quit', onSelect: props.onQuit } as const] : []),
+  ]
+
   return (
-    <div className="chat-panel">
-      {onPickProfile && (
-        <div className="profile-row">
-          {profileName ? (
-            <>
-              <span className="profile-name" title="Answers draw on this resume">
-                Resume: {profileName}
-              </span>
-              <button type="button" className="link" onClick={onPickProfile} aria-label="Replace resume">
-                Replace
-              </button>
-              {onClearProfile && (
-                <button type="button" className="link" onClick={onClearProfile} aria-label="Remove resume">
-                  Remove
-                </button>
-              )}
-            </>
-          ) : (
-            <button type="button" className="link" onClick={onPickProfile} aria-label="Upload resume">
-              Upload resume (.txt, .md or .pdf) so answers sound like you
+    <div className={`panel ${expanded ? 'expanded' : ''}`}>
+      <div className="panel-inner">
+        {props.onHide && (
+          <div className="hide-zone">
+            <button type="button" className="btn grey" aria-label="Hide panel" tabIndex={-1} onClick={props.onHide}>
+              <ChevronDown aria-hidden="true" />
             </button>
-          )}
-          {profileError && <span role="alert">{profileError}</span>}
+          </div>
+        )}
+        {modelStatus === 'loading' && <p className="model-status">Loading speech model…</p>}
+        {hasContent ? (
+          <div className="messages" aria-label="Conversation">
+            {transcript.map((entry) =>
+              entry.role === 'them' ? (
+                <div key={entry.id} className="line them">
+                  <span className="time">
+                    Interviewer · <span>{formatRelative(entry.relativeMs)}</span>
+                  </span>
+                  {entry.status === 'transcribing' ? <em>transcribing…</em> : entry.text}
+                </div>
+              ) : (
+                <div key={entry.id} className="me">
+                  <span className="time">{formatRelative(entry.relativeMs)}</span>
+                  {entry.status === 'transcribing' ? <em>transcribing…</em> : entry.text}
+                </div>
+              ),
+            )}
+            {status !== 'idle' && (
+              <div className="answer" aria-live="polite">
+                {screenshotAttached && <span className="caption">Screenshot attached</span>}
+                {status === 'streaming' && !answer ? (
+                  <p className="thinking">
+                    <span className="dot" aria-hidden="true" />
+                    <span className="sr-only">Thinking…</span>
+                  </p>
+                ) : (
+                  answer
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          expanded && (
+            <div className="empty">
+              <MessageCircleMore className="glyph" aria-hidden="true" />
+              {isListening ? (
+                <span>Listening… answers appear here as the interviewer asks.</span>
+              ) : (
+                <>
+                  {props.onToggleListening && (
+                    <button type="button" className="btn accent" tabIndex={-1} onClick={props.onToggleListening}>
+                      Start listening
+                    </button>
+                  )}
+                  <span>Answers appear here as the interviewer asks.</span>
+                </>
+              )}
+            </div>
+          )
+        )}
+        <div className="composer">
+          <textarea
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder={`Ask about your screen or conversation, or ${isMac ? '⌘' : 'Ctrl'}+Enter for the next thing to say`}
+            aria-label="Question"
+            rows={3}
+          />
+          <Menu
+            items={menu}
+            trigger={(triggerProps) => (
+              <button type="button" className="more" aria-label="More" tabIndex={-1} {...triggerProps}>
+                <Ellipsis aria-hidden="true" style={{ width: 16, height: 16 }} />
+              </button>
+            )}
+          />
+          <button type="button" className="btn accent send" aria-label="Send message" tabIndex={-1} onClick={() => submit(draft)}>
+            <ArrowUp aria-hidden="true" />
+          </button>
         </div>
-      )}
-      {modelStatus === 'loading' && <p className="model-status">Loading speech model…</p>}
-      <ol className="transcript" aria-label="Transcript">
-        {transcript.map((entry) => (
-          <li key={entry.id} className={entry.role}>
-            <span className="time">{formatRelative(entry.relativeMs)}</span>
-            <span className="speaker">{speaker(entry)}</span>
-            <span className="text">{entry.status === 'transcribing' ? <em>transcribing…</em> : entry.text}</span>
-          </li>
-        ))}
-      </ol>
-      <section className="answer" aria-live="polite">
-        {status !== 'idle' && screenshotAttached && <span className="badge">Screenshot attached</span>}
-        {status === 'streaming' && !answer && <p className="thinking">Thinking…</p>}
-        {answer && <p className="answer-text">{answer}</p>}
-        {status === 'error' && error && <p role="alert">{error}</p>}
-      </section>
-      <div className="composer">
-        <input
-          type="text"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder="Ask anything. Enter to send."
-          aria-label="Question"
-        />
-        <button type="button" onClick={onClear} aria-label="Clear">
-          Clear
-        </button>
+        {stripMessage && (
+          <div className="error-strip" role="alert">
+            <CircleAlert aria-hidden="true" style={{ width: 16, height: 16, flexShrink: 0 }} />
+            <span className="message">{stripMessage}</span>
+            {status === 'error' && props.onRetry && (
+              <button type="button" className="chip" tabIndex={-1} onClick={props.onRetry}>
+                <RotateCw aria-hidden="true" /> Retry
+              </button>
+            )}
+            <button type="button" className="chip" tabIndex={-1} onClick={dismissStrip}>
+              <X aria-hidden="true" /> Dismiss
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

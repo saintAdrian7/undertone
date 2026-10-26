@@ -41,12 +41,25 @@ describe('App', () => {
     expect(ipc.bridge.send).toHaveBeenCalledWith(IPC.toggleSession, undefined)
   })
 
-  it('toggles the chat panel and invisibility from the bar', async () => {
+  it('toggles the chat panel from the bar', async () => {
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: /ask/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /^ask$/i }))
     expect(ipc.bridge.send).toHaveBeenCalledWith(IPC.toggleChat, undefined)
-    fireEvent.click(screen.getByRole('button', { name: /invisib/i }))
+  })
+
+  it('toggles invisibility from the panel menu', async () => {
+    window.location.hash = '#/chat'
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: /more/i }))
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /hidden from screen share/i }))
     await waitFor(() => expect(ipc.bridge.invoke).toHaveBeenCalledWith(IPC.patchState, { isInvisible: true }))
+  })
+
+  it('hides the panel from its chevron', async () => {
+    window.location.hash = '#/chat'
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: /hide panel/i }))
+    expect(ipc.bridge.send).toHaveBeenCalledWith(IPC.toggleChat, undefined)
   })
 
   it('asks the default question when the global shortcut fires', async () => {

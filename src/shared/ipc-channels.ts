@@ -15,6 +15,9 @@ export const IPC = {
   // renderer → main (send)
   toggleSession: 'session:toggle',
   controlResetPosition: 'control:reset-position',
+  controlDrag: 'control:drag',
+  controlDragEnd: 'control:drag-end',
+  openSettings: 'settings:open',
   toggleChat: 'chat:toggle',
   quit: 'app:quit',
   // main → renderer (events)

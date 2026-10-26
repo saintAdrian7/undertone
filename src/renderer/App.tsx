@@ -13,30 +13,30 @@ import './styles.css'
 type Patch = (patch: RendererPatch) => Promise<void>
 
 const CHAT_MIN_HEIGHT = 140
-const WINDOW_PADDING_PX = 12
+const WINDOW_PADDING_PX = 4
 
 const currentRoute = (): string => window.location.hash.replace(/^#/, '') || '/control'
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max)
 
 function ControlScreen({ state, patch }: { state: AppState; patch: Patch }) {
   const bar = useRef<HTMLDivElement>(null)
-  // The bar's content decides the window width; the main process resizes the window to match.
+  // The pill's content decides the window width; the main process resizes the window to match.
   useContentSize(bar, ({ width }) => {
     void patch({ controlWidth: clamp(width + WINDOW_PADDING_PX, MIN_CONTROL_WIDTH, MAX_CONTROL_WIDTH) })
   })
-  // The main process owns session start/stop so the transcript and timers reset consistently.
-  const toggleListening = () => window.ipc.send(IPC.toggleSession, undefined)
   return (
-    <div className="control-root" onDoubleClick={() => window.ipc.send(IPC.controlResetPosition, undefined)}>
+    <div className="control-root">
       <div ref={bar} className="control-measure">
         <ControlBar
           state={state}
-          onToggleListening={toggleListening}
+          // The main process owns session start/stop so the transcript and timers reset consistently.
+          onToggleListening={() => window.ipc.send(IPC.toggleSession, undefined)}
           onToggleChat={() => window.ipc.send(IPC.toggleChat, undefined)}
-          onToggleInvisible={() => void patch({ isInvisible: !state.isInvisible })}
-          onToggleScreenUse={() => void patch({ screenUse: state.screenUse === 'required' ? 'off' : 'required' })}
           onToggleAutoAnswer={() => void patch({ autoAnswer: !state.autoAnswer })}
-          onQuit={() => window.ipc.send(IPC.quit, undefined)}
+          onOpenSettings={() => window.ipc.send(IPC.openSettings, undefined)}
+          onDrag={(position) => window.ipc.send(IPC.controlDrag, position)}
+          onDragEnd={() => window.ipc.send(IPC.controlDragEnd, undefined)}
+          onResetPosition={() => window.ipc.send(IPC.controlResetPosition, undefined)}
         />
       </div>
     </div>
@@ -49,20 +49,29 @@ function ChatScreen({ state, patch }: { state: AppState; patch: Patch }) {
   const root = useRef<HTMLDivElement>(null)
   const content = useRef<HTMLDivElement>(null)
   const [profileError, setProfileError] = useState<string | null>(null)
+  const [lastQuestion, setLastQuestion] = useState('')
+  // The panel's content decides the window height, within the configured cap.
+  useContentSize(content, ({ height }) => {
+    void patch({ chatWindowIsExpanded: true, chatExpandedHeight: clamp(height + WINDOW_PADDING_PX, CHAT_MIN_HEIGHT, MAX_CHAT_HEIGHT) })
+  })
+
+  const askAndRemember = useCallback(
+    (question: string) => {
+      setLastQuestion(question)
+      void ask(question)
+    },
+    [ask],
+  )
   const pickProfile = useCallback(() => {
     window.ipc
       .invoke(IPC.profilePick, undefined)
       .then((message) => setProfileError(message))
-      .catch((error: unknown) => setProfileError(error instanceof Error ? error.message : String(error)))
+      .catch((cause: unknown) => setProfileError(cause instanceof Error ? cause.message : String(cause)))
   }, [])
   const clearProfile = useCallback(() => {
     setProfileError(null)
     void window.ipc.invoke(IPC.profileClear, undefined)
   }, [])
-  // The panel's content decides the window height, within the configured cap.
-  useContentSize(content, ({ height }) => {
-    void patch({ chatWindowIsExpanded: true, chatExpandedHeight: clamp(height + WINDOW_PADDING_PX, CHAT_MIN_HEIGHT, MAX_CHAT_HEIGHT) })
-  })
 
   useEffect(() => {
     // Release the speech model's GPU/WASM memory when the window goes away.
@@ -73,36 +82,44 @@ function ChatScreen({ state, patch }: { state: AppState; patch: Patch }) {
 
   useEffect(() => {
     const unsubscribers = [
-      window.ipc.on(IPC.chatSubmit, () => void ask('')),
+      window.ipc.on(IPC.chatSubmit, () => askAndRemember('')),
       window.ipc.on(IPC.chatClear, () => clear()),
       window.ipc.on(IPC.chatScroll, ({ deltaY }) => {
-        root.current?.querySelector('.answer')?.scrollBy({ top: deltaY, behavior: 'smooth' })
+        root.current?.querySelector('.messages')?.scrollBy({ top: deltaY, behavior: 'smooth' })
       }),
     ]
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe())
-  }, [ask, clear])
+  }, [askAndRemember, clear])
 
   return (
     <div className="chat-root" ref={root}>
       <div ref={content} className="chat-measure">
-        {audioError && (
-          <p role="alert" className="audio-error">
-            {audioError}
-          </p>
-        )}
         <ChatPanel
           transcript={state.transcript}
           answer={answer}
           status={status}
-          error={error}
+          error={audioError ?? error}
+          isListening={state.isListening}
           screenshotAttached={screenshotAttached}
           modelStatus={modelStatus}
+          lastQuestion={lastQuestion}
           profileName={state.profileName}
-          profileError={profileError}
-          onAsk={ask}
+          profileError={audioError ?? profileError}
+          autoAnswer={state.autoAnswer}
+          isInvisible={state.isInvisible}
+          screenUse={state.screenUse}
+          onAsk={askAndRemember}
           onClear={clear}
+          onRetry={() => askAndRemember(lastQuestion)}
+          onHide={() => window.ipc.send(IPC.toggleChat, undefined)}
+          onToggleListening={() => window.ipc.send(IPC.toggleSession, undefined)}
+          onToggleAutoAnswer={() => void patch({ autoAnswer: !state.autoAnswer })}
+          onToggleInvisible={() => void patch({ isInvisible: !state.isInvisible })}
+          onToggleScreenUse={() => void patch({ screenUse: state.screenUse === 'required' ? 'off' : 'required' })}
           onPickProfile={pickProfile}
           onClearProfile={clearProfile}
+          onDismissProfileError={() => setProfileError(null)}
+          onQuit={() => window.ipc.send(IPC.quit, undefined)}
         />
       </div>
     </div>
