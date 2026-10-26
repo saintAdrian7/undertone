@@ -64,6 +64,15 @@ describe('createShortcutSyncer', () => {
     expect(syncer.active()).toEqual({})
   })
 
+  it('does not retry an accelerator another app owns on every state change', () => {
+    const { syncer, deps } = setup({ register: vi.fn(() => false) })
+    syncer.sync(state())
+    syncer.sync(state({ showChat: true }))
+    syncer.sync(state({ showChat: false }))
+    expect(deps.register).toHaveBeenCalledTimes(1)
+    expect(deps.log.error).toHaveBeenCalledTimes(1)
+  })
+
   it('survives an invalid accelerator that makes registration throw', () => {
     const { syncer, deps } = setup({
       register: vi.fn(() => {
