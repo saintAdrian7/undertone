@@ -90,6 +90,13 @@ describe('buildMessages', () => {
     expect(lower).toMatch(/no bullet|without bullet|not use bullet/)
   })
 
+  it('asks for short answers that neither pad nor repeat earlier answers', () => {
+    const lower = SYSTEM_PROMPT.toLowerCase()
+    expect(lower).toMatch(/two to four sentences/)
+    expect(lower).toMatch(/repeat/)
+    expect(lower).toMatch(/only what (the question|was) ask/)
+  })
+
   it('includes the user profile in the system prompt when one is set', () => {
     const { system } = buildMessages({ question: 'q', transcript: [], profile: 'Jane Doe, 6 years in payments.' })
     expect(system).toContain('Jane Doe, 6 years in payments.')
