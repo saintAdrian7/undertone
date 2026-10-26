@@ -66,7 +66,7 @@ npm run dist
 |---|---|
 | Start / stop listening | Click **Start** on the bar, or `Ctrl+Shift+\` |
 | Show / hide the answer panel | Click **Ask** on the bar |
-| Get answers automatically | **Auto on** (the default) on the bar: when the interviewer asks something and goes quiet for about a second, the answer starts on its own. If you start talking first, it stays quiet. **Auto off** leaves it to you. |
+| Get answers automatically | **Auto on** (the default) on the bar: when the interviewer asks something and goes quiet for about a second, the answer starts on its own; if you start talking first, it starts right away. **Auto off** leaves it to you. |
 | Ask for an answer yourself | Type in the panel and press Enter, or press `Ctrl+Enter` anywhere for "What should I say next?" |
 | Make answers sound like you | Click **Upload resume** at the top of the panel and pick a `.txt`, `.md` or `.pdf`. The text is kept in the app's user-data folder and sent with every question so answers draw on your real experience; **Remove** forgets it. |
 | Hide from screen share | Click **Shown/Hidden** on the bar, or `Ctrl+\` |
