@@ -84,6 +84,19 @@ describe('buildMessages', () => {
     expect(SYSTEM_PROMPT.toLowerCase()).toContain('untrusted')
   })
 
+  it('asks for natural spoken language rather than assistant prose', () => {
+    const lower = SYSTEM_PROMPT.toLowerCase()
+    expect(lower).toContain('contractions')
+    expect(lower).toMatch(/no bullet|without bullet|not use bullet/)
+  })
+
+  it('includes the user profile in the system prompt when one is set', () => {
+    const { system } = buildMessages({ question: 'q', transcript: [], profile: 'Jane Doe, 6 years in payments.' })
+    expect(system).toContain('Jane Doe, 6 years in payments.')
+    expect(systemPromptFor(null)).toBe(SYSTEM_PROMPT)
+    expect(systemPromptFor('CV text')).toContain('CV text')
+  })
+
   it('uses a default question when the user submits nothing', () => {
     const { messages } = buildMessages({ question: '   ', transcript: [] })
     const text = messages[0]?.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n') ?? ''
