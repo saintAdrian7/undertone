@@ -140,6 +140,15 @@ describe('createOverlayManager', () => {
     expect(windows.chat?.bounds.height).toBe(480)
   })
 
+  it('resizes the control bar to the measured width and re-anchors the chat', () => {
+    const { manager, windows, state } = setup()
+    manager.update(state({ showChat: true }))
+    manager.update(state({ showChat: true, controlWidth: 420 }))
+    expect(windows.control?.bounds.width).toBe(420)
+    const control = windows.control!.bounds
+    expect(windows.chat?.bounds.x).toBe(control.x + Math.round((420 - CHAT_WIDTH) / 2))
+  })
+
   it('destroys both windows on dispose', () => {
     const { manager, windows } = setup()
     manager.update(defaultState())
