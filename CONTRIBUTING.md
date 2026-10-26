@@ -41,7 +41,17 @@ Main-process logic is written as pure modules with Electron injected at the edge
    npm run lint
    ```
 
-4. Open a pull request. The template asks what changed, why, and how you tested it in the running app. CI runs the same three checks.
+4. Open a pull request. The template asks what changed, why, and how you tested it in the running app.
+
+## What happens on a pull request
+
+Three things run automatically, then a maintainer reads the result and approves or asks for changes by hand:
+
+- **PR checks** runs typecheck, lint and the tests with coverage. Lint findings show up as inline annotations in the Files tab, and a summary comment (or, for pull requests from forks, the job summary in the Checks tab) lists the results.
+- **CI** runs the same checks on Windows and Ubuntu plus `npm audit`.
+- **Claude review** reads the diff and leaves inline comments with findings and a summary. It never runs your code and cannot approve; treat its comments as a first pass, not a verdict. Maintainers: this job needs the `ANTHROPIC_API_KEY` repository secret (`gh secret set ANTHROPIC_API_KEY`).
+
+Merging into `main` requires the checks to pass and one approving review from a maintainer. Keep your branch rebased on `main`; a pull request that includes commits already on `main` cannot be merged.
 
 Style: TypeScript strict, no `any`, small pure functions, comments only where the code cannot say it. `npm run lint` tells you if something is off.
 

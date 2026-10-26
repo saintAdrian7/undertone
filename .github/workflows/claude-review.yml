@@ -1,0 +1,41 @@
+# Claude reviews every pull request and leaves comments before a maintainer looks at it.
+# Needs the ANTHROPIC_API_KEY repository secret. The job only reads the diff and files and posts
+# comments; it is given no shell beyond read-only gh queries, so it never executes the pull request's code.
+name: Claude review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: claude-review
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review this pull request for the Undertone repository as a careful maintainer would, following CONTRIBUTING.md and CLAUDE.md.
+            Look for: correctness bugs, missing or weak tests for changed behaviour, IPC payloads that are not validated with zod,
+            anything that lets the renderer reach main-owned state or keys, new runtime dependencies without justification,
+            assets or code copied from other products, and departures from the project's conventions.
+            Post findings as inline comments on the exact lines, each with the problem, why it matters and a concrete fix.
+            Finish with one summary comment: what the change does, what is good about it, the findings ordered by severity,
+            and whether it is ready for a maintainer to approve. Do not approve or merge; a maintainer does that by hand.
+            If there is nothing to flag, say so briefly.
+          claude_args: '--max-turns 15 --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"'
