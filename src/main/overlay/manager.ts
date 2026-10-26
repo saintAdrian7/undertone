@@ -137,6 +137,10 @@ export function createOverlayManager(deps: OverlayManagerDeps): OverlayManager {
         chat.setSize(CHAT_WIDTH, height)
         anchorChat()
       }
+      if (control.getBounds().width !== state.controlWidth) {
+        control.setSize(state.controlWidth, CONTROL_SIZE.height)
+        anchorChat()
+      }
 
       const controlVisible = state.windowsLoaded
       const chatVisible = state.windowsLoaded && state.showChat

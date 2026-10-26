@@ -1,10 +1,9 @@
-import type { AppState } from '@shared/state'
+import { MAX_CHAT_HEIGHT, type AppState } from '@shared/state'
 import type { Point, Size } from './geometry'
 
 export const CONTROL_SIZE: Size = { width: 320, height: 50 }
 export const CHAT_WIDTH = 540
-const CHAT_COLLAPSED_HEIGHT = 140
-const CHAT_MIN_EXPANDED_HEIGHT = 350
+export const CHAT_MIN_HEIGHT = 140
 
 export type OverlayKind = 'control' | 'chat'
 
@@ -42,13 +41,17 @@ export function isFocusable(state: AppState): boolean {
   return !(state.isInvisible && state.noFocusWhenInvisible)
 }
 
+const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max)
+
+/** The chat window follows its measured content height, within the minimum and the cap. */
 export function chatHeightFor(state: AppState): number {
-  if (state.chatWindowIsExpanded) return Math.max(state.chatExpandedHeight, CHAT_MIN_EXPANDED_HEIGHT)
-  return CHAT_COLLAPSED_HEIGHT
+  if (!state.chatWindowIsExpanded) return CHAT_MIN_HEIGHT
+  return clamp(state.chatExpandedHeight, CHAT_MIN_HEIGHT, MAX_CHAT_HEIGHT)
 }
 
 export function overlayWindowOptions(kind: OverlayKind, state: AppState, position?: Point): OverlayWindowOptions {
-  const size: Size = kind === 'control' ? CONTROL_SIZE : { width: CHAT_WIDTH, height: chatHeightFor(state) }
+  const size: Size =
+    kind === 'control' ? { width: state.controlWidth, height: CONTROL_SIZE.height } : { width: CHAT_WIDTH, height: chatHeightFor(state) }
   return {
     ...size,
     ...position,

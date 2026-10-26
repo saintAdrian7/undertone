@@ -3,6 +3,9 @@ import { z } from 'zod'
 export const MAX_TRANSCRIPT_ENTRIES = 200
 export const MAX_TRANSCRIPT_TEXT_CHARS = 4000
 export const MAX_CHAT_HEIGHT = 1200
+export const MIN_CONTROL_WIDTH = 200
+export const MAX_CONTROL_WIDTH = 800
+export const DEFAULT_CONTROL_WIDTH = 320
 
 export const ShortcutsSchema = z.object({
   toggleVisibility: z.string().default('CommandOrControl+\\'),
@@ -48,6 +51,7 @@ export const AppStateSchema = z.object({
   isRecordingShortcut: z.boolean().default(false),
   chatWindowIsExpanded: z.boolean().default(false),
   chatExpandedHeight: z.number().int().positive().max(MAX_CHAT_HEIGHT).default(500),
+  controlWidth: z.number().int().min(MIN_CONTROL_WIDTH).max(MAX_CONTROL_WIDTH).default(DEFAULT_CONTROL_WIDTH),
   screenUse: ScreenUseSchema.default('required'),
   theme: ThemeSchema.default('system'),
   shortcuts: ShortcutsSchema.prefault({}),
@@ -71,6 +75,7 @@ export const RendererPatchSchema = z.strictObject({
   noFocusWhenInvisible: z.boolean().optional(),
   chatWindowIsExpanded: z.boolean().optional(),
   chatExpandedHeight: z.number().int().positive().max(MAX_CHAT_HEIGHT).optional(),
+  controlWidth: z.number().int().min(MIN_CONTROL_WIDTH).max(MAX_CONTROL_WIDTH).optional(),
   screenUse: ScreenUseSchema.optional(),
   theme: ThemeSchema.optional(),
   meHasVoiceActivity: z.boolean().optional(),

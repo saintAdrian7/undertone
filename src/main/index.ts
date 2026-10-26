@@ -31,7 +31,8 @@ import { trayMenuTemplate } from './tray/menu'
 import { selectLoopbackSource } from './capture/sources'
 import { captureScreenshot } from './capture/screenshot'
 import { ClaudeAnswerProvider, type MessageStreamClient } from './llm/claude-provider'
-import { parseEnv, resolveConfig } from './config'
+import { DEFAULT_OPENAI_BASE_URL, parseEnv, resolveConfig, type AppConfig, type LlmConfig } from './config'
+import { OpenAICompatibleProvider } from './llm/openai-compatible-provider'
 
 log.initialize()
 
@@ -64,20 +65,32 @@ function loadDotEnv(): Record<string, string> {
 
 const describe = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
+function createProvider(llm: LlmConfig | null): AnswerProvider | null {
+  if (!llm) return null
+  if (llm.provider === 'anthropic') {
+    return new ClaudeAnswerProvider({
+      // The SDK's stream params are a superset of the shape this provider builds.
+      client: new Anthropic({ apiKey: llm.apiKey ?? undefined }) as unknown as MessageStreamClient,
+      model: llm.model,
+    })
+  }
+  return new OpenAICompatibleProvider({ baseUrl: llm.baseUrl ?? DEFAULT_OPENAI_BASE_URL, apiKey: llm.apiKey, model: llm.model })
+}
+
 function main(): void {
-  const config = resolveConfig({ ...loadDotEnv(), ...process.env })
+  let config: AppConfig = { llm: null }
+  try {
+    config = resolveConfig({ ...loadDotEnv(), ...process.env })
+  } catch (error) {
+    log.error(describe(error))
+  }
   const store = createStore()
   const windowsByKind = new Map<OverlayKind, BrowserWindow>()
   const loaded = new Set<OverlayKind>()
 
-  const provider: AnswerProvider | null = config.anthropicApiKey
-    ? new ClaudeAnswerProvider({
-        // The SDK's stream params are a superset of the shape this provider builds.
-        client: new Anthropic({ apiKey: config.anthropicApiKey }) as unknown as MessageStreamClient,
-        model: config.claudeModel,
-      })
-    : null
-  if (!provider) log.warn('ANTHROPIC_API_KEY is not set; answers are disabled until it is added to .env')
+  const provider = createProvider(config.llm)
+  if (provider) log.info(`Answer model: ${config.llm?.provider} ${config.llm?.model}`)
+  else log.warn('No model configured; set ANTHROPIC_API_KEY, or LLM_PROVIDER and LLM_MODEL, in .env')
 
   function loadRoute(win: BrowserWindow, route: string): void {
     if (DEV_RENDERER_URL) void win.loadURL(`${DEV_RENDERER_URL}#${route}`)
