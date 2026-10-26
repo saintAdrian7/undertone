@@ -131,6 +131,10 @@ npm run lint
 
 Main-process logic is written as pure modules with Electron injected at the edges, so overlay, shortcut, capture, auto-answer and provider behaviour is covered by fast tests without launching Electron. The project was built test-first; each feature landed as a failing-test commit followed by the implementation.
 
+## Contributing
+
+Issues and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md): it covers setup, the code layout, the test-first workflow and what a good PR looks like. Issues labelled `good first issue` are a gentle way in. Please read the [code of conduct](CODE_OF_CONDUCT.md), and report anything security-related through [SECURITY.md](SECURITY.md) rather than a public issue.
+
 ## Licence
 
 MIT. Fonts: Inter (SIL Open Font License) via `@fontsource-variable/inter`. Icons: Lucide (ISC).
