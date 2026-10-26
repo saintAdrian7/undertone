@@ -47,7 +47,17 @@ export function renderPrompt(request: AnswerRequest, screenshotPath?: string): s
   return parts.join('\n\n')
 }
 
-export type StreamLine = { type: 'text'; text: string } | { type: 'done' } | { type: 'error'; message: string }
+/**
+ * The CLI refuses to start inside another Claude Code session, which it detects through environment
+ * markers. The copilot may well be launched from one, so those markers are removed for the child.
+ */
+export function childEnvironment(env: Record<string, string | undefined>): Record<string, string | undefined> {
+  return Object.fromEntries(
+    Object.entries(env).filter(([key]) => key === 'CLAUDE_CONFIG_DIR' || (key !== 'CLAUDECODE' && !key.startsWith('CLAUDE_CODE_'))),
+  )
+}
+
+export type StreamLine ={ type: 'text'; text: string } | { type: 'done' } | { type: 'error'; message: string }
 
 /** One line of stream-json output, or null when it is session bookkeeping. */
 export function parseStreamLine(line: string): StreamLine | null {

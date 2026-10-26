@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildClaudeCodeArgs, parseStreamLine, renderPrompt } from './claude-code-protocol'
+import { buildClaudeCodeArgs, childEnvironment, parseStreamLine, renderPrompt } from './claude-code-protocol'
 
 describe('buildClaudeCodeArgs', () => {
   it('requests a streamed, isolated, non-interactive completion', () => {
@@ -18,6 +18,13 @@ describe('buildClaudeCodeArgs', () => {
   it('allows only the Read tool when a screenshot file must be opened', () => {
     const args = buildClaudeCodeArgs({ model: 'sonnet', system: 's', allowRead: true })
     expect(args.slice(args.indexOf('--tools'), args.indexOf('--tools') + 2)).toEqual(['--tools', 'Read'])
+  })
+})
+
+describe('childEnvironment', () => {
+  it('drops the markers of an enclosing Claude Code session but keeps the config dir and everything else', () => {
+    const env = childEnvironment({ PATH: 'x', CLAUDECODE: '1', CLAUDE_CODE_SESSION_ID: 's', CLAUDE_CODE_ENTRYPOINT: 'cli', CLAUDE_CONFIG_DIR: 'C:\\cfg', HOME: 'h' })
+    expect(env).toEqual({ PATH: 'x', CLAUDE_CONFIG_DIR: 'C:\\cfg', HOME: 'h' })
   })
 })
 

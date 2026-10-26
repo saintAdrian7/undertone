@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { AnswerProvider, AnswerRequest } from '@shared/providers'
 import { SYSTEM_PROMPT } from './prompt'
-import { buildClaudeCodeArgs, parseStreamLine, renderPrompt, type StreamLine } from './claude-code-protocol'
+import { buildClaudeCodeArgs, childEnvironment, parseStreamLine, renderPrompt, type StreamLine } from './claude-code-protocol'
 
 /** The slice of a child process this provider uses, so tests can supply a fake. */
 export interface ChildLike {
@@ -33,7 +33,8 @@ type QueueEvent = StreamLine | { type: 'closed'; code: number | null }
 
 const ERROR_SNIPPET_CHARS = 300
 const describe = (error: unknown): string => (error instanceof Error ? error.message : String(error))
-const defaultSpawn: SpawnLike = (command, args) => nodeSpawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
+const defaultSpawn: SpawnLike = (command, args) =>
+  nodeSpawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: childEnvironment(process.env) })
 
 /**
  * Streams answers through the Claude Code CLI, so the user's Claude login is used instead of an API key.
