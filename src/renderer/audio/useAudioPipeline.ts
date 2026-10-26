@@ -18,16 +18,20 @@ const describe = (error: unknown): string => (error instanceof Error ? error.mes
 export interface AudioPipelineState {
   error: string | null
   modelStatus: ModelStatus
+  /** Advisory text such as "transcription is falling behind", or null. */
+  notice: string | null
 }
 
 /** Runs microphone and loopback capture, VAD and transcription while the app is listening. */
 export function useAudioPipeline(state: AppState, patch: (patch: RendererPatch) => Promise<void>): AudioPipelineState {
   const [error, setError] = useState<string | null>(null)
   const [modelStatus, setModelStatus] = useState<ModelStatus>('idle')
+  const [notice, setNotice] = useState<string | null>(null)
 
   useEffect(() => {
     if (!state.isListening) return
     setError(null)
+    setNotice(null)
     let disposed = false
     let session: ListeningSession | null = null
     const sessionStartedAt = state.sessionStartedAt ? Date.parse(state.sessionStartedAt) : Date.now()
@@ -51,6 +55,9 @@ export function useAudioPipeline(state: AppState, patch: (patch: RendererPatch) 
         if (!disposed) setModelStatus(status)
       },
       onError: setError,
+      onNotice: (message) => {
+        if (!disposed) setNotice(message)
+      },
     })
       .then((started) => {
         if (disposed) void started.stop()
@@ -70,5 +77,5 @@ export function useAudioPipeline(state: AppState, patch: (patch: RendererPatch) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.isListening])
 
-  return { error, modelStatus }
+  return { error, modelStatus, notice }
 }

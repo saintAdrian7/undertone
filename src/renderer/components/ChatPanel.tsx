@@ -15,6 +15,8 @@ export interface ChatPanelProps {
   isListening: boolean
   screenshotAttached?: boolean
   modelStatus?: ModelStatus
+  /** Advisory line from the audio pipeline, such as transcription falling behind. */
+  notice?: string | null
   lastQuestion?: string
   profileName?: string | null
   profileError?: string | null
@@ -89,6 +91,7 @@ export function ChatPanel(props: ChatPanelProps) {
           </div>
         )}
         {modelStatus === 'loading' && <p className="model-status">Loading speech model…</p>}
+        {props.notice && <p className="model-status">{props.notice}</p>}
         {hasContent ? (
           <div className="messages" aria-label="Conversation">
             {transcript.map((entry) =>

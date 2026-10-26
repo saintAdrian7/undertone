@@ -1,4 +1,5 @@
 import type { TranscriptionInput, TranscriptionProvider, TranscriptionResult } from '@shared/providers'
+import { cleanTranscript } from './hallucination-filter'
 
 export const WHISPER_SAMPLE_RATE = 16000
 
@@ -8,7 +9,14 @@ export interface AsrOptions {
   language?: string
   task?: 'transcribe'
   chunk_length_s?: number
+  /** Blocks the decoder from emitting the same n-gram twice, which is how "thank you, thank you, ..." loops start. */
+  no_repeat_ngram_size?: number
 }
+
+/** English-only checkpoints (`*.en`) reject `language` and `task`; transformers.js throws if they are given. */
+export const isEnglishOnlyModel = (model: string): boolean => /\.en$|[-_]en$|english/i.test(model)
+
+const NO_REPEAT_NGRAM = 6
 
 export type AsrPipeline = ((audio: Float32Array, options: AsrOptions) => Promise<{ text: string }>) & {
   dispose?: () => Promise<void> | void
@@ -92,10 +100,15 @@ export class WhisperProvider implements TranscriptionProvider {
       throw new Error(`Whisper expects ${WHISPER_SAMPLE_RATE} Hz audio, received ${sampleRate} Hz`)
     }
     const run = await this.load()
-    const options: AsrOptions = { task: 'transcribe', chunk_length_s: WHISPER_CHUNK_SECONDS }
-    if (language) options.language = language
+    const options: AsrOptions = { no_repeat_ngram_size: NO_REPEAT_NGRAM }
+    if (!isEnglishOnlyModel(this.options.model)) {
+      options.task = 'transcribe'
+      if (language) options.language = language
+    }
+    // The chunked pipeline only earns its cost past one 30 s Whisper window; most utterances are far shorter.
+    if (samples.length > WHISPER_SAMPLE_RATE * WHISPER_CHUNK_SECONDS) options.chunk_length_s = WHISPER_CHUNK_SECONDS
     const { text } = await run(samples, options)
-    return { text: text.trim() }
+    return { text: cleanTranscript(text) ?? '' }
   }
 }
 

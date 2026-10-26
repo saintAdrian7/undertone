@@ -18,6 +18,8 @@ export interface ListeningOptions {
   onTranscriptOp(op: TranscriptOp): void
   onModelStatus?(status: ModelStatus): void
   onError(message: string): void
+  /** Advisory text for the panel (transcription falling behind), or null once it has caught up. */
+  onNotice?(message: string | null): void
   transcriptionProvider?: TranscriptionProvider
   /** Microphone to use; null or undefined means the system default. */
   micDeviceId?: string | null
@@ -27,7 +29,11 @@ export interface ListeningSession {
   stop(): Promise<void>
 }
 
-const MAX_CONCURRENT_TRANSCRIPTIONS = 2
+/** One pass at a time: parallel passes on one WASM or WebGPU session only contend for it. */
+const MAX_CONCURRENT_TRANSCRIPTIONS = 1
+/** A segment that waited this long for its turn means the model cannot keep up with the conversation. */
+const BACKLOG_WARN_MS = 30_000
+const BACKLOG_NOTICE = 'Transcription is falling behind. A smaller speech model (Settings, Audio) will keep up better.'
 const VAD_REDEMPTION_MS = 300
 const VAD_PRE_SPEECH_PAD_MS = 300
 
@@ -63,6 +69,16 @@ export async function startListening(options: ListeningOptions): Promise<Listeni
       })
   }
   const limit = createLimiter(MAX_CONCURRENT_TRANSCRIPTIONS)
+  let behind = false
+  const noteWait = (waitedMs: number) => {
+    if (waitedMs > BACKLOG_WARN_MS && !behind) {
+      behind = true
+      options.onNotice?.(BACKLOG_NOTICE)
+    } else if (waitedMs <= BACKLOG_WARN_MS && behind) {
+      behind = false
+      options.onNotice?.(null)
+    }
+  }
   const activity: Record<SpeakerRole, boolean> = { me: false, them: false }
   const streams: MediaStream[] = []
   const vads: MicVAD[] = []
@@ -108,9 +124,11 @@ export async function startListening(options: ListeningOptions): Promise<Listeni
   async function transcribeSegment(role: SpeakerRole, audio: Float32Array, startedAt: number): Promise<void> {
     const id = newId()
     options.onTranscriptOp({ op: 'add', id, role, startedAt, sessionStartedAt: options.sessionStartedAt })
+    const queuedAt = Date.now()
     try {
       const { text } = await limit(async () => {
         if (stopped) return { text: '' }
+        noteWait(Date.now() - queuedAt)
         return transcription.transcribe({ samples: audio, sampleRate: WHISPER_SAMPLE_RATE })
       })
       options.onTranscriptOp(text ? { op: 'resolve', id, text } : { op: 'remove', id })
