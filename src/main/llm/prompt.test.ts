@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { TranscriptEntry } from '@shared/state'
-import { buildMessages, formatTranscript, MAX_TRANSCRIPT_ENTRIES, MAX_QUESTION_CHARS, MAX_ENTRY_CHARS, SYSTEM_PROMPT } from './prompt'
+import { buildMessages, formatTranscript, systemPromptFor, MAX_TRANSCRIPT_ENTRIES, MAX_QUESTION_CHARS, MAX_ENTRY_CHARS, SYSTEM_PROMPT } from './prompt'
 
 const entry = (patch: Partial<TranscriptEntry>): TranscriptEntry => ({
   id: 'x',

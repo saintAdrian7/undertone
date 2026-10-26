@@ -1,10 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { buildClaudeCodeArgs, childEnvironment, parseStreamLine, renderPrompt } from './claude-code-protocol'
+import type { TranscriptEntry } from '@shared/state'
+import { buildClaudeCodeArgs, childEnvironment, parseStreamLine, renderPrompt, renderUserMessage } from './claude-code-protocol'
+
+const entry = (id: string, role: 'me' | 'them', text: string, relativeMs = 0): TranscriptEntry => ({
+  id,
+  role,
+  createdAt: new Date(Date.parse('2026-10-19T10:00:00.000Z') + relativeMs).toISOString(),
+  relativeMs,
+  status: 'done',
+  text,
+})
 
 describe('buildClaudeCodeArgs', () => {
-  it('requests a streamed, isolated, non-interactive completion', () => {
+  it('requests a streamed, isolated, long-lived session fed by stream-json input', () => {
     const args = buildClaudeCodeArgs({ model: 'sonnet', system: 'Be brief.' })
     expect(args.slice(0, 3)).toEqual(['-p', '--output-format', 'stream-json'])
+    expect(args.slice(args.indexOf('--input-format'), args.indexOf('--input-format') + 2)).toEqual(['--input-format', 'stream-json'])
     expect(args).toContain('--include-partial-messages')
     expect(args).toContain('--no-session-persistence')
     expect(args.slice(args.indexOf('--model'), args.indexOf('--model') + 2)).toEqual(['--model', 'sonnet'])
@@ -13,11 +24,6 @@ describe('buildClaudeCodeArgs', () => {
     expect(args.slice(args.indexOf('--tools'), args.indexOf('--tools') + 2)).toEqual(['--tools', ''])
     expect(args).toContain('--strict-mcp-config')
     expect(args.slice(args.indexOf('--setting-sources'), args.indexOf('--setting-sources') + 2)).toEqual(['--setting-sources', ''])
-  })
-
-  it('allows only the Read tool when a screenshot file must be opened', () => {
-    const args = buildClaudeCodeArgs({ model: 'sonnet', system: 's', allowRead: true })
-    expect(args.slice(args.indexOf('--tools'), args.indexOf('--tools') + 2)).toEqual(['--tools', 'Read'])
   })
 })
 
@@ -29,21 +35,41 @@ describe('childEnvironment', () => {
 })
 
 describe('renderPrompt', () => {
-  const transcript = [
-    { id: 'a', role: 'them' as const, createdAt: '2026-10-19T10:00:00.000Z', relativeMs: 5000, status: 'done' as const, text: 'Why this role?' },
-  ]
-  it('includes the transcript lines and the question', () => {
+  const transcript = [entry('a', 'them', 'Why this role?', 5000), entry('b', 'me', 'Because growth.', 9000), entry('c', 'them', 'Tell me more.', 14000)]
+
+  it('renders the whole transcript and the question on the first turn', () => {
     const prompt = renderPrompt({ question: 'What should I say?', transcript })
     expect(prompt).toContain('[00:05] Interviewer: Why this role?')
+    expect(prompt).toContain('[00:14] Interviewer: Tell me more.')
     expect(prompt).toContain('What should I say?')
   })
+
+  it('renders only the lines after the last sent entry on later turns', () => {
+    const prompt = renderPrompt({ question: 'q', transcript }, { afterId: 'a' })
+    expect(prompt).not.toContain('Why this role?')
+    expect(prompt).toContain('Because growth.')
+    expect(prompt).toContain('Tell me more.')
+    expect(prompt).toMatch(/since/i)
+  })
+
+  it('falls back to the full transcript when the remembered entry is gone', () => {
+    expect(renderPrompt({ question: 'q', transcript }, { afterId: 'missing' })).toContain('Why this role?')
+  })
+
   it('uses the default question when the user typed nothing', () => {
     expect(renderPrompt({ question: '  ', transcript: [] })).toContain('What should I say next?')
   })
-  it('points at the screenshot file when one was saved', () => {
-    const prompt = renderPrompt({ question: 'q', transcript: [] }, 'C:\\temp\\shot.png')
-    expect(prompt).toContain('C:\\temp\\shot.png')
-    expect(renderPrompt({ question: 'q', transcript: [] })).not.toMatch(/screenshot/i)
+})
+
+describe('renderUserMessage', () => {
+  it('wraps the prompt as a stream-json user message', () => {
+    const line = renderUserMessage({ text: 'hello' })
+    expect(line.endsWith('\n')).toBe(true)
+    expect(JSON.parse(line)).toEqual({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'hello' }] } })
+  })
+  it('adds the screenshot as an inline image block', () => {
+    const parsed = JSON.parse(renderUserMessage({ text: 'look', screenshot: { dataBase64: 'QUJD', contentType: 'image/png' } }))
+    expect(parsed.message.content[1]).toEqual({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'QUJD' } })
   })
 })
 
@@ -61,7 +87,7 @@ describe('parseStreamLine', () => {
   })
   it('reports the terminal result as done or error', () => {
     expect(parseStreamLine(JSON.stringify({ type: 'result', subtype: 'success', is_error: false }))).toEqual({ type: 'done' })
-    expect(parseStreamLine(JSON.stringify({ type: 'result', subtype: 'error_during_execution', is_error: true, result: 'quota exceeded' }))).toEqual({
+    expect(parseStreamLine(JSON.stringify({ type: 'result', subtype: 'success', is_error: true, result: 'quota exceeded' }))).toEqual({
       type: 'error',
       message: expect.stringContaining('quota exceeded'),
     })
