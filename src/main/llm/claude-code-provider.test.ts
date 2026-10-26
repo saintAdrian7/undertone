@@ -171,6 +171,30 @@ describe('ClaudeCodeProvider', () => {
     expect(children[0]!.kill).toHaveBeenCalled()
   })
 
+  it('uses a fixed system prompt when given, so the profile never changes the session', async () => {
+    const spawn = vi.fn<SpawnLike>(() => {
+      const child = new FakeChild()
+      child.onLine = () => setTimeout(() => reply('ok')(child), 0)
+      return child
+    })
+    const provider = new ClaudeCodeProvider({ command: 'claude', model: 'haiku', spawn, system: 'JUDGE RULES' })
+    await collect(provider.stream({ question: 'q', transcript: [], profile: 'CV one' }))
+    await collect(provider.stream({ question: 'q', transcript: [], profile: 'CV two' }))
+    expect(spawn).toHaveBeenCalledTimes(1)
+    expect(spawn.mock.calls[0]![1]).toContain('JUDGE RULES')
+  })
+
+  it('recycles the session after the configured number of turns so context cannot grow forever', async () => {
+    const spawn = vi.fn<SpawnLike>(() => {
+      const child = new FakeChild()
+      child.onLine = () => setTimeout(() => reply('ok')(child), 0)
+      return child
+    })
+    const provider = new ClaudeCodeProvider({ command: 'claude', model: 'haiku', spawn, maxTurnsPerSession: 2 })
+    for (let i = 0; i < 3; i++) await collect(provider.stream({ question: `q${i}`, transcript: [] }))
+    expect(spawn).toHaveBeenCalledTimes(2)
+  })
+
   it('dispose kills a live process', async () => {
     const { provider, children } = setup(reply('ok'))
     await collect(provider.stream({ question: 'q', transcript: [] }))

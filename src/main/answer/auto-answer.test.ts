@@ -78,6 +78,90 @@ describe('createAutoAnswerScheduler', () => {
     expect(trigger).toHaveBeenCalledTimes(1)
   })
 
+  describe('with a judge', () => {
+    const verdict = (patch: Partial<{ isAsk: boolean; directedAtUser: boolean; complete: boolean; action: 'answer' | 'silent'; score: number }> = {}) => ({
+      isAsk: true,
+      directedAtUser: true,
+      complete: true,
+      action: 'answer' as const,
+      score: 0.9,
+      questionText: null,
+      ...patch,
+    })
+    const context = { turns: [], lastAnswered: null, userName: null }
+
+    it('asks the judge as soon as the interviewer is quiet and answers at commit when it says answer', async () => {
+      const trigger = vi.fn()
+      const judge = vi.fn(async () => verdict())
+      const scheduler = createAutoAnswerScheduler({ trigger, judge, getContext: () => context })
+      scheduler.onInterviewerLine('Tell me about yourself')
+      expect(judge).toHaveBeenCalledTimes(1)
+      expect(judge.mock.calls[0]![0]).toMatchObject({ candidate: 'Tell me about yourself', context })
+      await vi.advanceTimersByTimeAsync(AUTO_ANSWER_DELAY_MS)
+      expect(trigger).toHaveBeenCalledTimes(1)
+    })
+
+    it('stays silent when the judge says ignore, even though the heuristic would have fired', async () => {
+      const trigger = vi.fn()
+      const scheduler = createAutoAnswerScheduler({ trigger, judge: async () => verdict({ directedAtUser: false }), getContext: () => context })
+      scheduler.onInterviewerLine('Why this role?')
+      await vi.advanceTimersByTimeAsync(AUTO_ANSWER_DELAY_MS * 2)
+      expect(trigger).not.toHaveBeenCalled()
+    })
+
+    it('waits on an incomplete candidate and judges the accumulated text when more arrives', async () => {
+      const trigger = vi.fn()
+      const judge = vi.fn(async ({ candidate }: { candidate: string }) => verdict({ complete: candidate.includes('project') }))
+      const scheduler = createAutoAnswerScheduler({ trigger, judge, getContext: () => context })
+      scheduler.onInterviewerLine('Tell me about')
+      await vi.advanceTimersByTimeAsync(AUTO_ANSWER_DELAY_MS)
+      expect(trigger).not.toHaveBeenCalled()
+      scheduler.onInterviewerLine('your last project')
+      await vi.advanceTimersByTimeAsync(AUTO_ANSWER_DELAY_MS)
+      expect(judge).toHaveBeenLastCalledWith(expect.objectContaining({ candidate: 'Tell me about your last project' }))
+      expect(trigger).toHaveBeenCalledTimes(1)
+    })
+
+    it('falls back to the heuristic when the judge returns nothing', async () => {
+      const trigger = vi.fn()
+      const scheduler = createAutoAnswerScheduler({ trigger, judge: async () => null, getContext: () => context })
+      scheduler.onInterviewerLine('Why this role?')
+      await vi.advanceTimersByTimeAsync(AUTO_ANSWER_DELAY_MS)
+      expect(trigger).toHaveBeenCalledTimes(1)
+      scheduler.onInterviewerLine('Okay, thanks.')
+      await vi.advanceTimersByTimeAsync(AUTO_ANSWER_DELAY_MS)
+      expect(trigger).toHaveBeenCalledTimes(1)
+    })
+
+    it('never answers the same question twice', async () => {
+      const trigger = vi.fn()
+      const scheduler = createAutoAnswerScheduler({ trigger, judge: async () => verdict(), getContext: () => context })
+      scheduler.onInterviewerLine('Why this role?')
+      await vi.advanceTimersByTimeAsync(AUTO_ANSWER_DELAY_MS)
+      scheduler.onInterviewerLine('Why this role?')
+      await vi.advanceTimersByTimeAsync(AUTO_ANSWER_DELAY_MS)
+      expect(trigger).toHaveBeenCalledTimes(1)
+    })
+
+    it('fires on the heuristic when the user starts talking before the judge has answered', async () => {
+      const trigger = vi.fn()
+      const scheduler = createAutoAnswerScheduler({ trigger, judge: () => new Promise(() => undefined), getContext: () => context })
+      scheduler.onInterviewerLine('Why this role?')
+      scheduler.onUserActivity(true)
+      expect(trigger).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not fire for acknowledgements without even asking the judge', async () => {
+      const trigger = vi.fn()
+      const judge = vi.fn(async () => verdict())
+      const scheduler = createAutoAnswerScheduler({ trigger, judge, getContext: () => context })
+      scheduler.onInterviewerLine('Okay, makes sense.')
+      await vi.advanceTimersByTimeAsync(AUTO_ANSWER_DELAY_MS)
+      expect(judge).not.toHaveBeenCalled()
+      expect(trigger).not.toHaveBeenCalled()
+    })
+  })
+
   it('cancel drops a pending question', () => {
     const trigger = vi.fn()
     const scheduler = createAutoAnswerScheduler({ trigger })

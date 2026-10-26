@@ -34,6 +34,18 @@ describe('encrypted key storage', () => {
   })
 })
 
+describe('a second settings file for the background model', () => {
+  it('lives beside the main one without touching it', async () => {
+    await saveLlmSettings(dir, { provider: 'claude-code', model: 'sonnet', baseUrl: null, apiKey: null })
+    await saveLlmSettings(dir, { provider: 'claude-code', model: 'haiku', baseUrl: null, apiKey: null }, undefined, 'llm-background.json')
+    expect((await loadLlmSettings(dir))?.model).toBe('sonnet')
+    expect((await loadLlmSettings(dir, undefined, 'llm-background.json'))?.model).toBe('haiku')
+    await saveLlmSettings(dir, null, undefined, 'llm-background.json')
+    expect(await loadLlmSettings(dir, undefined, 'llm-background.json')).toBeNull()
+    expect((await loadLlmSettings(dir))?.model).toBe('sonnet')
+  })
+})
+
 describe('mergeApiKey', () => {
   const saved = { provider: 'openai' as const, model: 'm', baseUrl: 'https://api.openai.com/v1', apiKey: 'stored' }
   it('reuses the stored key only for the same provider and base url', () => {

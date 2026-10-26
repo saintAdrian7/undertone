@@ -59,6 +59,36 @@ describe('SettingsApp', () => {
     )
   })
 
+  it('lets the user pick a separate, faster model for quick decisions, and switch back to the main one', async () => {
+    render(<SettingsApp />)
+    await goto(/model/i)
+    const separate = (await screen.findByRole('checkbox', { name: /separate.*quick decisions/i })) as HTMLInputElement
+    expect(separate.checked).toBe(false)
+    fireEvent.click(separate)
+    const provider = screen.getByRole('combobox', { name: /background provider/i })
+    fireEvent.change(provider, { target: { value: 'claude-code' } })
+    fireEvent.change(screen.getByRole('textbox', { name: /background model/i }), { target: { value: 'haiku' } })
+    fireEvent.click(screen.getByRole('button', { name: /save background/i }))
+    await waitFor(() => expect(ipc.bridge.invoke).toHaveBeenCalledWith(IPC.llmBackgroundSet, { provider: 'claude-code', model: 'haiku', baseUrl: null }))
+    fireEvent.click(separate)
+    await waitFor(() => expect(ipc.bridge.invoke).toHaveBeenCalledWith(IPC.llmBackgroundSet, null))
+  })
+
+  it('lets the user pick a separate, faster model for quick decisions, and switch back to the main one', async () => {
+    render(<SettingsApp />)
+    await goto(/model/i)
+    const separate = (await screen.findByRole('checkbox', { name: /separate.*quick decisions/i })) as HTMLInputElement
+    expect(separate.checked).toBe(false)
+    fireEvent.click(separate)
+    const provider = screen.getByRole('combobox', { name: /background provider/i })
+    fireEvent.change(provider, { target: { value: 'claude-code' } })
+    fireEvent.change(screen.getByRole('textbox', { name: /background model/i }), { target: { value: 'haiku' } })
+    fireEvent.click(screen.getByRole('button', { name: /save background/i }))
+    await waitFor(() => expect(ipc.bridge.invoke).toHaveBeenCalledWith(IPC.llmBackgroundSet, { provider: 'claude-code', model: 'haiku', baseUrl: null }))
+    fireEvent.click(separate)
+    await waitFor(() => expect(ipc.bridge.invoke).toHaveBeenCalledWith(IPC.llmBackgroundSet, null))
+  })
+
   it('previews the uploaded resume on Profile', async () => {
     render(<SettingsApp />)
     await goto(/profile/i)
