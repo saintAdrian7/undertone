@@ -114,6 +114,17 @@ describe('ChatPanel', () => {
     expect(screen.getByText(/loading speech model/i)).toBeTruthy()
   })
 
+  it('shows how much of the speech model has downloaded while it loads', () => {
+    setup({ modelStatus: 'loading', modelProgress: { loaded: 75_000_000, total: 200_000_000, percent: 38 } })
+    expect(screen.getByText(/downloading speech model.*38%.*75 of 200 MB/i)).toBeTruthy()
+    expect(screen.queryByText(/^loading speech model/i)).toBeNull()
+  })
+
+  it('goes back to the plain loading line once the download is complete but the model is still being prepared', () => {
+    setup({ modelStatus: 'loading', modelProgress: { loaded: 200, total: 200, percent: 100 } })
+    expect(screen.getByText(/loading speech model/i)).toBeTruthy()
+  })
+
   it('hides the panel from the chevron button', () => {
     const { props } = setup({ onHide: vi.fn() })
     fireEvent.click(screen.getByRole('button', { name: /hide panel/i }))

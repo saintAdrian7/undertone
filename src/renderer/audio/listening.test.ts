@@ -20,7 +20,31 @@ vi.mock('@ricky0123/vad-web', () => ({
   },
 }))
 
-import { startListening, type ListeningOptions } from './listening'
+const whisper = vi.hoisted(() => {
+  const listeners = new Set<(state: unknown) => void>()
+  const provider = {
+    state: { status: 'idle', progress: null } as { status: string; progress: unknown },
+    preload: vi.fn(async () => undefined),
+    status: () => provider.state.status,
+    subscribe: vi.fn((listener: (state: unknown) => void) => {
+      listeners.add(listener)
+      listener(provider.state)
+      return () => listeners.delete(listener)
+    }),
+    publish(state: { status: string; progress: unknown }) {
+      provider.state = state
+      for (const listener of listeners) listener(state)
+    },
+    listeners,
+  }
+  return { provider, getShared: vi.fn(() => provider) }
+})
+vi.mock('../stt/whisper-provider', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../stt/whisper-provider')>()),
+  getSharedWhisperProvider: whisper.getShared,
+}))
+
+import { startListening, warmSpeechModel, type ListeningOptions } from './listening'
 
 const fakeStream = () => {
   const track = { stop: vi.fn() }
@@ -64,6 +88,50 @@ const callbacks = (instance: FakeVad) =>
 
 beforeEach(() => {
   vad.instances.length = 0
+  whisper.provider.listeners.clear()
+  whisper.provider.state = { status: 'idle', progress: null }
+  whisper.provider.preload.mockClear()
+  whisper.getShared.mockClear()
+})
+
+describe('warmSpeechModel', () => {
+  it('preloads the shared model and forwards its status and download progress until unsubscribed', () => {
+    const onModelStatus = vi.fn()
+    const onModelProgress = vi.fn()
+    const stop = warmSpeechModel({ whisperModel: 'm', ortWasmUrl: './vendor/ort/', transformersWasmUrl: './vendor/ort-transformers/', onModelStatus, onModelProgress })
+    expect(whisper.getShared).toHaveBeenCalledWith({ model: 'm', wasmPaths: './vendor/ort-transformers/' })
+    expect(whisper.provider.preload).toHaveBeenCalledTimes(1)
+    whisper.provider.publish({ status: 'loading', progress: { loaded: 1, total: 4, percent: 25 } })
+    expect(onModelStatus).toHaveBeenLastCalledWith('loading')
+    expect(onModelProgress).toHaveBeenLastCalledWith({ loaded: 1, total: 4, percent: 25 })
+    stop()
+    whisper.provider.publish({ status: 'ready', progress: null })
+    expect(onModelStatus).not.toHaveBeenCalledWith('ready')
+  })
+
+  it('reports a load failure as an error', async () => {
+    whisper.provider.preload.mockRejectedValueOnce(new Error('offline'))
+    const onError = vi.fn()
+    warmSpeechModel({ whisperModel: 'm', ortWasmUrl: './vendor/ort/', onError })
+    await flush()
+    expect(onError).toHaveBeenCalledWith('Speech model failed to load: offline')
+  })
+})
+
+describe('startListening with the shared speech model', () => {
+  it('reports the model status and download progress to the session callbacks', async () => {
+    const { options } = setup()
+    delete options.transcriptionProvider
+    const onModelStatus = vi.fn()
+    const onModelProgress = vi.fn()
+    const session = await startListening({ ...options, onModelStatus, onModelProgress })
+    expect(whisper.provider.preload).toHaveBeenCalledTimes(1)
+    whisper.provider.publish({ status: 'loading', progress: { loaded: 2, total: 4, percent: 50 } })
+    expect(onModelStatus).toHaveBeenLastCalledWith('loading')
+    expect(onModelProgress).toHaveBeenLastCalledWith({ loaded: 2, total: 4, percent: 50 })
+    await session.stop()
+    expect(whisper.provider.listeners.size).toBe(0)
+  })
 })
 
 describe('startListening', () => {

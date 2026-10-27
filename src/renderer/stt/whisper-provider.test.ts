@@ -1,7 +1,39 @@
 import { describe, expect, it, vi } from 'vitest'
-import { WhisperProvider, getSharedWhisperProvider, disposeSharedWhisperProvider, type AsrPipeline, type AsrPipelineFactory } from './whisper-provider'
+import {
+  WhisperProvider,
+  getSharedWhisperProvider,
+  disposeSharedWhisperProvider,
+  pipelineOptionsFor,
+  createProgressTracker,
+  type AsrPipeline,
+  type AsrPipelineFactory,
+  type ModelState,
+} from './whisper-provider'
 
 const samples = new Float32Array(16000)
+
+describe('pipelineOptionsFor', () => {
+  it('picks small weights: a q4 decoder with an fp32 encoder on WebGPU, q8 everything on WASM', () => {
+    expect(pipelineOptionsFor('webgpu')).toEqual({ device: 'webgpu', dtype: { encoder_model: 'fp32', decoder_model_merged: 'q4' } })
+    expect(pipelineOptionsFor('wasm')).toEqual({ device: 'wasm', dtype: 'q8' })
+  })
+})
+
+describe('createProgressTracker', () => {
+  it('sums download progress across the model files and marks finished files complete', () => {
+    const tracker = createProgressTracker()
+    expect(tracker.update({ status: 'initiate', file: 'onnx/encoder_model.onnx' })).toBeNull()
+    expect(tracker.update({ status: 'progress', file: 'onnx/encoder_model.onnx', loaded: 50, total: 100 })).toEqual({ loaded: 50, total: 100, percent: 50 })
+    expect(tracker.update({ status: 'progress', file: 'onnx/decoder_model_merged_q4.onnx', loaded: 25, total: 300 })).toEqual({
+      loaded: 75,
+      total: 400,
+      percent: 19,
+    })
+    expect(tracker.update({ status: 'done', file: 'onnx/encoder_model.onnx' })).toEqual({ loaded: 125, total: 400, percent: 31 })
+    // A file that was served from the cache reports done without any progress event and never inflates the total.
+    expect(tracker.update({ status: 'done', file: 'config.json' })).toEqual({ loaded: 125, total: 400, percent: 31 })
+  })
+})
 
 describe('shared WhisperProvider', () => {
   it('returns one instance per model and reloads only after dispose', async () => {
@@ -37,6 +69,29 @@ describe('shared WhisperProvider', () => {
     expect(provider.status()).toBe('ready')
     await provider.dispose()
     expect(provider.status()).toBe('idle')
+  })
+
+  it('publishes status and download progress to subscribers, immediately and on every change', async () => {
+    let emit!: (event: { status: string; file: string; loaded?: number; total?: number }) => void
+    let resolve!: (p: AsrPipeline) => void
+    const factory: AsrPipelineFactory = (_model, onProgress) => {
+      emit = (event) => onProgress?.(event)
+      return new Promise((r) => (resolve = r))
+    }
+    const provider = new WhisperProvider({ model: 'm', pipelineFactory: factory })
+    const seen: ModelState[] = []
+    const unsubscribe = provider.subscribe((state) => seen.push(state))
+    expect(seen).toEqual([{ status: 'idle', progress: null }])
+    const loading = provider.preload()
+    expect(seen.at(-1)).toEqual({ status: 'loading', progress: null })
+    emit({ status: 'progress', file: 'onnx/decoder_model_merged_q4.onnx', loaded: 40, total: 80 })
+    expect(seen.at(-1)).toEqual({ status: 'loading', progress: { loaded: 40, total: 80, percent: 50 } })
+    resolve(async () => ({ text: 'x' }))
+    await loading
+    expect(seen.at(-1)).toEqual({ status: 'ready', progress: null })
+    unsubscribe()
+    await provider.dispose()
+    expect(seen.at(-1)).toEqual({ status: 'ready', progress: null })
   })
 })
 

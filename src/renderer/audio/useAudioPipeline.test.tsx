@@ -7,9 +7,10 @@ import { installFakeIpc, type FakeIpc } from '../test/fake-ipc'
 
 const listening = vi.hoisted(() => ({
   startListening: vi.fn(),
+  warmSpeechModel: vi.fn(() => vi.fn()),
   stop: vi.fn(async () => undefined),
 }))
-vi.mock('./listening', () => ({ startListening: listening.startListening }))
+vi.mock('./listening', () => ({ startListening: listening.startListening, warmSpeechModel: listening.warmSpeechModel }))
 
 import { useAudioPipeline } from './useAudioPipeline'
 import type { ListeningOptions } from './listening'
@@ -21,9 +22,12 @@ beforeEach(() => {
   ipc = installFakeIpc()
   ipc.respond(IPC.transcriptApply, () => defaultState())
   listening.startListening.mockReset()
+  listening.warmSpeechModel.mockClear()
   listening.stop.mockClear()
   listening.startListening.mockImplementation(async () => ({ stop: listening.stop }))
 })
+
+type WarmOptions = Parameters<typeof import('./listening').warmSpeechModel>[0]
 
 describe('useAudioPipeline', () => {
   it('does nothing while not listening', () => {
@@ -65,6 +69,23 @@ describe('useAudioPipeline', () => {
     const { result } = renderHook(() => useAudioPipeline(state({ isListening: true }), patch))
     await waitFor(() => expect(result.current.error).toBe('Permission denied'))
     expect(patch).toHaveBeenCalledWith({ isListening: false })
+  })
+
+  it('warms the speech model at startup, before listening begins, and exposes its download progress', async () => {
+    const patch = vi.fn(async () => undefined)
+    const stopWarming = vi.fn()
+    listening.warmSpeechModel.mockReturnValueOnce(stopWarming)
+    const { result, unmount } = renderHook(() => useAudioPipeline(state(), patch))
+    expect(listening.warmSpeechModel).toHaveBeenCalledTimes(1)
+    expect(listening.startListening).not.toHaveBeenCalled()
+    const options = listening.warmSpeechModel.mock.calls[0]?.[0] as WarmOptions
+    expect(options.transformersWasmUrl).toBe(new URL('vendor/ort-transformers/', document.baseURI).href)
+    act(() => options.onModelStatus?.('loading'))
+    act(() => options.onModelProgress?.({ loaded: 50, total: 200, percent: 25 }))
+    expect(result.current.modelStatus).toBe('loading')
+    expect(result.current.modelProgress).toEqual({ loaded: 50, total: 200, percent: 25 })
+    unmount()
+    expect(stopWarming).toHaveBeenCalledTimes(1)
   })
 
   it('exposes the speech model status reported by the listening session', async () => {
