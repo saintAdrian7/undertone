@@ -2,7 +2,15 @@ import { useState, type KeyboardEvent } from 'react'
 import { ArrowUp, ChevronDown, CircleAlert, Ellipsis, MessageCircleMore, RotateCw, X } from 'lucide-react'
 import type { TranscriptEntry } from '@shared/state'
 import { formatRelative } from '@shared/time'
-import type { ModelStatus } from '../stt/whisper-provider'
+import type { ModelProgress, ModelStatus } from '../stt/whisper-provider'
+
+const MB = 1_000_000
+
+/** "Downloading speech model… 38% (75 of 200 MB)" while bytes are still arriving; the plain line otherwise (cached, or being compiled). */
+export function modelLoadingLine(progress: ModelProgress | null): string {
+  if (!progress || progress.loaded >= progress.total) return 'Loading speech model…'
+  return `Downloading speech model… ${progress.percent}% (${Math.round(progress.loaded / MB)} of ${Math.round(progress.total / MB)} MB)`
+}
 import { Menu, type MenuItem } from './Menu'
 
 export type AnswerStatus = 'idle' | 'streaming' | 'done' | 'error'
@@ -15,6 +23,8 @@ export interface ChatPanelProps {
   isListening: boolean
   screenshotAttached?: boolean
   modelStatus?: ModelStatus
+  /** Download progress while the speech model loads. */
+  modelProgress?: ModelProgress | null
   /** Advisory line from the audio pipeline, such as transcription falling behind. */
   notice?: string | null
   lastQuestion?: string
@@ -90,7 +100,7 @@ export function ChatPanel(props: ChatPanelProps) {
             </button>
           </div>
         )}
-        {modelStatus === 'loading' && <p className="model-status">Loading speech model…</p>}
+        {modelStatus === 'loading' && <p className="model-status">{modelLoadingLine(props.modelProgress ?? null)}</p>}
         {props.notice && <p className="model-status">{props.notice}</p>}
         {hasContent ? (
           <div className="messages" aria-label="Conversation">

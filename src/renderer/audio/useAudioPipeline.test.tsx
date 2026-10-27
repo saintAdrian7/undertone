@@ -7,7 +7,7 @@ import { installFakeIpc, type FakeIpc } from '../test/fake-ipc'
 
 const listening = vi.hoisted(() => ({
   startListening: vi.fn(),
-  warmSpeechModel: vi.fn(() => vi.fn()),
+  warmSpeechModel: vi.fn((_options: unknown) => vi.fn()),
   stop: vi.fn(async () => undefined),
 }))
 vi.mock('./listening', () => ({ startListening: listening.startListening, warmSpeechModel: listening.warmSpeechModel }))

@@ -46,7 +46,7 @@ function ControlScreen({ state, patch }: { state: AppState; patch: Patch }) {
 
 function ChatScreen({ state, patch }: { state: AppState; patch: Patch }) {
   const { answer, status, error, screenshotAttached, ask, clear } = useAnswer()
-  const { error: audioError, modelStatus, notice } = useAudioPipeline(state, patch)
+  const { error: audioError, modelStatus, modelProgress, notice } = useAudioPipeline(state, patch)
   const root = useRef<HTMLDivElement>(null)
   const content = useRef<HTMLDivElement>(null)
   const [profileError, setProfileError] = useState<string | null>(null)
@@ -103,6 +103,7 @@ function ChatScreen({ state, patch }: { state: AppState; patch: Patch }) {
           isListening={state.isListening}
           screenshotAttached={screenshotAttached}
           modelStatus={modelStatus}
+          modelProgress={modelProgress}
           notice={notice}
           lastQuestion={lastQuestion}
           profileName={state.profileName}

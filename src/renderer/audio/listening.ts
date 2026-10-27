@@ -4,19 +4,25 @@ import type { TranscriptionProvider } from '@shared/providers'
 import type { TranscriptOp } from '@shared/ipc'
 import { createLimiter } from '@shared/limiter'
 import { initialSegmenter, reduceSegmenter, type SegmenterState } from '../vad/segmenter'
-import { WHISPER_SAMPLE_RATE, getSharedWhisperProvider, type ModelStatus } from '../stt/whisper-provider'
+import { WHISPER_SAMPLE_RATE, getSharedWhisperProvider, type ModelProgress, type ModelStatus } from '../stt/whisper-provider'
 
-export interface ListeningOptions {
-  sessionStartedAt: number
+export interface SpeechModelOptions {
   whisperModel: string
-  vadAssetsUrl: string
   ortWasmUrl: string
   /** Where transformers.js should load its own ONNX runtime WASM from; defaults to `ortWasmUrl`. */
   transformersWasmUrl?: string
+  onModelStatus?(status: ModelStatus): void
+  /** Bytes downloaded so far while the model loads; null once nothing is downloading. */
+  onModelProgress?(progress: ModelProgress | null): void
+  onError?(message: string): void
+}
+
+export interface ListeningOptions extends SpeechModelOptions {
+  sessionStartedAt: number
+  vadAssetsUrl: string
   onActivity(role: SpeakerRole, active: boolean): void
   /** Transcript changes are emitted as operations; the main process applies them. */
   onTranscriptOp(op: TranscriptOp): void
-  onModelStatus?(status: ModelStatus): void
   onError(message: string): void
   /** Advisory text for the panel (transcription falling behind), or null once it has caught up. */
   onNotice?(message: string | null): void
@@ -51,22 +57,31 @@ async function getLoopbackStream(): Promise<MediaStream> {
   return stream
 }
 
+/**
+ * Starts loading the speech model (a download of up to ~125 MB the first time) and reports its
+ * status and progress until the returned function is called. Idempotent: one model per renderer,
+ * kept across listening sessions, so calling this at startup makes the first utterance fast.
+ */
+export function warmSpeechModel(options: SpeechModelOptions): () => void {
+  const whisper = getSharedWhisperProvider({ model: options.whisperModel, wasmPaths: options.transformersWasmUrl ?? options.ortWasmUrl })
+  const unsubscribe = whisper.subscribe((state) => {
+    options.onModelStatus?.(state.status)
+    options.onModelProgress?.(state.progress)
+  })
+  whisper.preload().catch((error: unknown) => {
+    options.onError?.(`Speech model failed to load: ${describe(error)}`)
+  })
+  return unsubscribe
+}
+
 export async function startListening(options: ListeningOptions): Promise<ListeningSession> {
   let transcription: TranscriptionProvider
+  let stopWarming = () => {}
   if (options.transcriptionProvider) {
     transcription = options.transcriptionProvider
   } else {
-    // One model per renderer, loaded ahead of the first utterance and kept across sessions.
-    const whisper = getSharedWhisperProvider({ model: options.whisperModel, wasmPaths: options.transformersWasmUrl ?? options.ortWasmUrl })
-    transcription = whisper
-    options.onModelStatus?.(whisper.status() === 'ready' ? 'ready' : 'loading')
-    whisper
-      .preload()
-      .then(() => options.onModelStatus?.('ready'))
-      .catch((error: unknown) => {
-        options.onModelStatus?.('error')
-        options.onError(`Speech model failed to load: ${describe(error)}`)
-      })
+    transcription = getSharedWhisperProvider({ model: options.whisperModel, wasmPaths: options.transformersWasmUrl ?? options.ortWasmUrl })
+    stopWarming = warmSpeechModel(options)
   }
   const limit = createLimiter(MAX_CONCURRENT_TRANSCRIPTIONS)
   let behind = false
@@ -140,6 +155,7 @@ export async function startListening(options: ListeningOptions): Promise<Listeni
 
   async function teardown(): Promise<void> {
     stopped = true
+    stopWarming()
     await Promise.allSettled(vads.map((vad) => vad.destroy()))
     for (const stream of streams) stopTracks(stream)
   }

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { IPC } from '@shared/ipc'
 import type { AppState, RendererPatch } from '@shared/state'
-import type { ModelStatus } from '../stt/whisper-provider'
-import { startListening, type ListeningSession } from './listening'
+import type { ModelProgress, ModelStatus } from '../stt/whisper-provider'
+import { startListening, warmSpeechModel, type ListeningSession } from './listening'
 
 const env = import.meta.env
 const WHISPER_MODEL = env.VITE_WHISPER_MODEL ?? 'onnx-community/whisper-base'
@@ -18,6 +18,8 @@ const describe = (error: unknown): string => (error instanceof Error ? error.mes
 export interface AudioPipelineState {
   error: string | null
   modelStatus: ModelStatus
+  /** Download progress while the speech model loads, or null. */
+  modelProgress: ModelProgress | null
   /** Advisory text such as "transcription is falling behind", or null. */
   notice: string | null
 }
@@ -26,7 +28,22 @@ export interface AudioPipelineState {
 export function useAudioPipeline(state: AppState, patch: (patch: RendererPatch) => Promise<void>): AudioPipelineState {
   const [error, setError] = useState<string | null>(null)
   const [modelStatus, setModelStatus] = useState<ModelStatus>('idle')
+  const [modelProgress, setModelProgress] = useState<ModelProgress | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+
+  // Start the model download the moment the window opens, so the first question does not wait on it.
+  useEffect(
+    () =>
+      warmSpeechModel({
+        whisperModel: WHISPER_MODEL,
+        ortWasmUrl: ORT_WASM_URL,
+        transformersWasmUrl: TRANSFORMERS_WASM_URL,
+        onModelStatus: setModelStatus,
+        onModelProgress: setModelProgress,
+        onError: setError,
+      }),
+    [],
+  )
 
   useEffect(() => {
     if (!state.isListening) return
@@ -54,6 +71,9 @@ export function useAudioPipeline(state: AppState, patch: (patch: RendererPatch) 
       onModelStatus: (status) => {
         if (!disposed) setModelStatus(status)
       },
+      onModelProgress: (progress) => {
+        if (!disposed) setModelProgress(progress)
+      },
       onError: setError,
       onNotice: (message) => {
         if (!disposed) setNotice(message)
@@ -77,5 +97,5 @@ export function useAudioPipeline(state: AppState, patch: (patch: RendererPatch) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.isListening])
 
-  return { error, modelStatus, notice }
+  return { error, modelStatus, modelProgress, notice }
 }

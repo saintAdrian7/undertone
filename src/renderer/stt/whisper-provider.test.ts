@@ -103,7 +103,7 @@ describe('WhisperProvider', () => {
     await provider.transcribe({ samples, sampleRate: 16000 })
     await provider.transcribe({ samples, sampleRate: 16000 })
     expect(factory).toHaveBeenCalledTimes(1)
-    expect(factory).toHaveBeenCalledWith('onnx-community/whisper-base')
+    expect(factory).toHaveBeenCalledWith('onnx-community/whisper-base', expect.any(Function))
     expect(run).toHaveBeenCalledTimes(2)
   })
 
