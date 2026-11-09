@@ -45,7 +45,9 @@ describe('BrowserLocator', () => {
     expect(spawn).toHaveBeenCalledTimes(1)
     const [command, args] = spawn.mock.calls[0]!
     expect(command).toBe('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe')
-    expect(args).toEqual(['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encodeCommand(LOCATOR_SCRIPT)])
+    // No "-ExecutionPolicy Bypass": policy does not apply to an encoded command, and that flag next to one
+    // looks like malware to endpoint protection, which held the helper indefinitely on a real machine.
+    expect(args).toEqual(['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', encodeCommand(LOCATOR_SCRIPT)])
     expect(Buffer.from(args.at(-1)!, 'base64').toString('utf16le')).toBe(LOCATOR_SCRIPT)
   })
 

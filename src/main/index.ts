@@ -61,6 +61,8 @@ import { renderTrayIconPng } from './tray/icon'
 import { trayMenuTemplate } from './tray/menu'
 import { selectLoopbackSource } from './capture/sources'
 import { captureScreenshot } from './capture/screenshot'
+import { BrowserLocator, powershellPathFor } from './capture/browser-locator'
+import { topCropFraction } from './capture/page-crop'
 import { ClaudeAnswerProvider, type MessageStreamClient } from './llm/claude-provider'
 import { DEFAULT_OPENAI_BASE_URL, parseEnv, type AppConfig, type LlmConfig } from './config'
 import { OpenAICompatibleProvider } from './llm/openai-compatible-provider'
@@ -317,13 +319,27 @@ async function main(): Promise<void> {
     }
   }
 
+  // Finds where a browser's page starts, so screenshots leave out its tabs and address bar.
+  // Windows only (UI Automation); started now so the first screenshot does not wait for it to load.
+  const browserLocator = process.platform === 'win32' ? new BrowserLocator({ command: powershellPathFor(process.env), ownPid: process.pid }) : null
+  browserLocator?.start()
+
   let captures = 0
   async function capture(): Promise<Screenshot> {
     const chat = manager.getWindow('chat')
     const display = chat ? screen.getDisplayMatching(chat.getBounds()) : screen.getPrimaryDisplay()
+    const locator = browserLocator
     return captureScreenshot({
       display,
       getSources: (options) => desktopCapturer.getSources(options),
+      topCrop: locator
+        ? async () => {
+            // UI Automation answers in physical pixels, so compare against the display in physical pixels too.
+            const physical = screen.dipToScreenRect(null, display.bounds)
+            const top = await locator.pageTop(physical)
+            return top === null ? null : topCropFraction(top, physical)
+          }
+        : undefined,
       // Reference-counted so overlapping captures never re-expose the overlay early.
       setCapturing: (flag) => {
         captures += flag ? 1 : -1
@@ -621,6 +637,7 @@ async function main(): Promise<void> {
     autoAnswer.cancel()
     void provider?.dispose?.()
     void judgeProvider?.dispose?.()
+    browserLocator?.dispose()
     tray?.destroy()
     tray = null
     manager.dispose()
