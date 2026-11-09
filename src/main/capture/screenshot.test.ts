@@ -1,12 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 import { captureScreenshot, fitScreenshot, MAX_SCREENSHOT_BYTES, type CaptureDeps, type CaptureSource, type CaptureThumbnail } from './screenshot'
 
+const crops: Array<{ x: number; y: number; width: number; height: number }> = []
+
 const png = (bytes: number[]): CaptureThumbnail => ({
   isEmpty: () => bytes.length === 0,
   toPNG: () => new Uint8Array(bytes),
   toJPEG: () => new Uint8Array(bytes.slice(0, Math.ceil(bytes.length / 2))),
   getSize: () => ({ width: 1920, height: 1080 }),
   resize: () => png(bytes.slice(0, Math.ceil(bytes.length / 4))),
+  crop: (rect) => {
+    crops.push(rect)
+    return png([7, 7])
+  },
 })
 
 /** A thumbnail whose encodings have controllable sizes, for the size-cap tests. */
@@ -23,7 +29,13 @@ const sized = (pngBytes: number, jpegBytes: number, resizedJpegBytes: number): C
     resize: () => {
       throw new Error('not expected')
     },
+    crop: () => {
+      throw new Error('not expected')
+    },
   }),
+  crop: () => {
+    throw new Error('not expected')
+  },
 })
 
 describe('fitScreenshot', () => {
@@ -109,5 +121,56 @@ describe('captureScreenshot', () => {
   it('fails clearly when no screen source exists', async () => {
     const d = deps({ getSources: vi.fn(async () => []) })
     await expect(captureScreenshot({ ...d, attempts: 1 })).rejects.toThrow(/no display source/)
+  })
+})
+
+describe('captureScreenshot with the browser bar removed', () => {
+  it('cuts the rows above the page off the full width of the image', async () => {
+    crops.length = 0
+    const result = await captureScreenshot(deps({ topCrop: async () => 182 / 1080 }))
+    expect(crops).toEqual([{ x: 0, y: 182, width: 1920, height: 1080 - 182 }])
+    expect(result.dataBase64).toBe(Buffer.from([7, 7]).toString('base64'))
+  })
+
+  it('leaves the image whole when there is no browser to crop', async () => {
+    crops.length = 0
+    const result = await captureScreenshot(deps({ topCrop: async () => null }))
+    expect(crops).toEqual([])
+    expect(result.dataBase64).toBe(Buffer.from([2, 3]).toString('base64'))
+  })
+
+  it('leaves the image whole when finding the page fails', async () => {
+    crops.length = 0
+    await captureScreenshot(
+      deps({
+        topCrop: async () => {
+          throw new Error('helper died')
+        },
+      }),
+    )
+    expect(crops).toEqual([])
+  })
+
+  it('never waits on a slow page lookup past its deadline', async () => {
+    crops.length = 0
+    const result = await captureScreenshot(deps({ topCrop: () => new Promise(() => undefined), topCropTimeoutMs: 10 }))
+    expect(crops).toEqual([])
+    expect(result.dataBase64).toBe(Buffer.from([2, 3]).toString('base64'))
+  })
+
+  it('looks the page up once per screenshot, even when the capture is retried', async () => {
+    let attempt = 0
+    const topCrop = vi.fn(async () => 0.1)
+    await captureScreenshot({
+      ...deps({
+        getSources: vi.fn(async () => {
+          attempt++
+          return [source('2', attempt < 2 ? [] : [9])]
+        }),
+      }),
+      topCrop,
+      attempts: 2,
+    })
+    expect(topCrop).toHaveBeenCalledTimes(1)
   })
 })
